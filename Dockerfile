@@ -1,10 +1,14 @@
-# Start with the ROS 2 Jazzy base image
-FROM ros:jazzy-ros-base AS base
+# Start with the ROS 2 humble base image
+FROM ros:humble-ros-base AS base
+
+ARG ROS_DISTRO=humble
+ENV ROS_DISTRO=${ROS_DISTRO}
 
 # Add build arguments for user selection (use existing ubuntu user)
 ARG USER_NAME=ubuntu
 ARG USER_UID=1000
 ARG USER_GID=1000
+
 
 # 1. Install dependencies (Root)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,7 +27,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     usbutils \
     build-essential \
     nano \
-    yq \
     git-lfs \
     pipx \
     # Qt/X11 runtime dependencies
@@ -39,16 +42,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxcb-render-util0 \
     # Install git lfs
     && git lfs install \
-    # Download and install cloudflared
-  #  && CLOUDFLARED_ARCH=$(dpkg --print-architecture | sed 's/amd64/amd64/g; s/arm64/arm64/g') \
-  #  && wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CLOUDFLARED_ARCH}.deb -O cloudflared.deb \
-  #  && apt-get install -y ./cloudflared.deb \
-  #  && rm cloudflared.deb \
+    # Install yq
+    && YQ_VERSION="v4.40.5" \
+    && YQ_BINARY="yq_linux_$(dpkg --print-architecture)" \
+    && wget https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/${YQ_BINARY}.tar.gz -O - | tar xz && mv ${YQ_BINARY} /usr/bin/yq \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Use existing user/group
-# The base image already provides the `ubuntu` user (UID 1000). No need to create users here.
+# 2. Setup User
+# Create the user if it doesn't exist (some base images might not have it)
+RUN if ! id -u $USER_NAME >/dev/null 2>&1; then \
+    groupadd --gid $USER_GID $USER_NAME && \
+    useradd --uid $USER_UID --gid $USER_GID -m $USER_NAME; \
+    fi
 
 # Setup directory
 RUN mkdir -p /home/$USER_NAME/ros2_workspaces/src
@@ -62,12 +68,12 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     apt-get update && \
     rosdep update && \
     rosdep install --from-paths src --ignore-src -y && \
-#    git clone https://github.com/IEEE-UCF/SEC26Mirror.git /tmp/sec26mirror && \
-#    cd /tmp/sec26mirror && \
-#    git checkout 6e5be2c && \
-    rosdep install --from-paths ros2_ws/src --ignore-src -y --skip-keys ament_python || true && \
+    #    git clone https://github.com/IEEE-UCF/SEC26Mirror.git /tmp/sec26mirror && \
+    #    cd /tmp/sec26mirror && \
+    #    git checkout 6e5be2c && \
+    rosdep install --from-paths src --ignore-src -y --skip-keys ament_python || true && \
     cd / && \
-#   rm -rf /tmp/sec26mirror && \
+    #   rm -rf /tmp/sec26mirror && \
     rm -rf /var/lib/apt/lists/*
 
 # Fix permissions so the user/group own their workspace
@@ -82,17 +88,13 @@ USER $USER_NAME
 
 RUN rosdep update
 
-# 4. Build the Setup Workspace
-RUN /bin/bash -c ". /opt/ros/$ROS_DISTRO/setup.bash && \
-    cd /home/$USER_NAME/ros2_workspaces && \
-    colcon build && \
-    rm -rf build log"
-
 # 5. Create and Build the Agent
 # Note: This creates a nested workspace 'microros_agent_ws' inside 'ros2_workspaces'
-RUN /bin/bash -c ". /opt/ros/$ROS_DISTRO/setup.bash && \
-    . /home/$USER_NAME/ros2_workspaces/install/setup.bash && \
+RUN /bin/bash -c " \
+    source /opt/ros/$ROS_DISTRO/setup.bash && \
     cd /home/$USER_NAME/ros2_workspaces && \
+    colcon build --symlink-install && \
+    source install/setup.bash && \
     ros2 run micro_ros_setup create_agent_ws.sh && \
     ros2 run micro_ros_setup build_agent.sh && \
     rm -rf microros_agent_ws/build microros_agent_ws/log"
@@ -128,28 +130,13 @@ FROM base AS dev
 USER root
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-$ROS_DISTRO-ros-gz \
     ros-$ROS_DISTRO-rviz2 \
-    ros-$ROS_DISTRO-gz-ros2-control \
+    ros-$ROS_DISTRO-rqt \
+    ros-$ROS_DISTRO-rqt-graph \
     ros-$ROS_DISTRO-robot-localization \
-    curl \
-    lsb-release \
-    gnupg \
-    ca-certificates && \
-    # Fetch and install OSRF package signing key
-    curl -fsSL https://packages.osrfoundation.org/gazebo.gpg -o /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
-    # Add Gazebo (OSRF) apt repository for the current distro
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] https://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" > /etc/apt/sources.list.d/gazebo-stable.list && \
-    apt-get update && \
-    # Install Gazebo harmonic and needed Qt/X11/XCB/OpenGL libs to support GUI
-    apt-get install -y --no-install-recommends \
-    gz-harmonic && \
-    # Cleanup apt caches
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-#Add rqt graph
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-$ROS_DISTRO-rqt-graph 
+    ros-$ROS_DISTRO-tf2-tools \
+    ros-$ROS_DISTRO-xacro \
+    && rm -rf /var/lib/apt/lists/*
 
 USER $USER_NAME
 ENTRYPOINT ["/ros_entrypoint.sh"]
