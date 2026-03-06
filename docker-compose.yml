@@ -15,8 +15,8 @@ services:
       # --- Source Code (Synced with Host) ---
       # - ./ros2_ws/src:/home/ubuntu/ros2_workspaces/src/racer_ros:delegated
       - ./ros2_ws/src/racer_ros:/home/ubuntu/ros2_workspaces/src/racer_ros:delegated
-      - ./ros2_ws/src/f1tenth_gym_ros:/home/ubuntu/ros2_workspaces/src/f1tenth_gym_ros:delegated
-      - ./ros2_ws/src/ackermann_msgs:/home/ubuntu/ros2_workspaces/src/ackermann_msgs:delegated
+      - ./ros2_ws/src/f1tenth_gym_ross:/home/ubuntu/ros2_workspaces/src/f1tenth_gym_ros:delegated
+      - ./ros2_ws/src/ackermann_msgss:/home/ubuntu/ros2_workspaces/src/ackermann_msgs:delegated
       # Ensure ROS2 workspace-level VS Code settings land at /home/ubuntu/ros2_workspaces/.vscode
       - ./ros2_ws/.vscode:/home/ubuntu/ros2_workspaces/.vscode:delegated
       
