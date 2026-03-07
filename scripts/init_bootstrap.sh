@@ -31,8 +31,8 @@ SEED_SRC=""
 echo "[bootstrap] Preparing libs_external seed"
 mkdir -p "$DATA"
 
-if [ -f "$DATA/.sec26_libs_seeded" ]; then
-  echo "[bootstrap] Sentinel found: $DATA/.sec26_libs_seeded — skipping seed"
+if [ -f "$DATA/.racer_libs_seeded" ]; then
+  echo "[bootstrap] Sentinel found: $DATA/.racer_libs_seeded — skipping seed"
   exit 0
 fi
 

@@ -1,11 +1,10 @@
-# Start with the ROS 2 Jazzy base image
 # FROM ros:jazzy-ros-base AS base
 FROM ros:humble-ros-base AS base
 # Add build arguments for user selection (use existing ubuntu user)
 ARG USER_NAME=ubuntu
 ARG USER_UID=1000
 ARG USER_GID=1000
-
+ARG ROS_DISTRO=humble
 # 1. Install dependencies (Root)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -41,12 +40,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && git lfs install \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-    #manually install the yq binary for Jammy Jellyfish(22.04)
-RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq \
-    && chmod +x /usr/bin/yq
+# RUN apt-get install -y \
+#     ros-humble-teleop \
+#     ros-humble-yq
 
 # 2.Create the user/group
-# The base image already provides the `ubuntu` user (UID 1000)
 # Configure passwordless sudo for the user
 RUN groupadd --gid ${USER_GID} ${USER_NAME} \
     && useradd --uid $USER_UID --gid ${USER_GID} -m -s /bin/bash ${USER_NAME} \
@@ -55,11 +53,15 @@ RUN groupadd --gid ${USER_GID} ${USER_NAME} \
 
 # Setup directory
 RUN mkdir -p /home/$USER_NAME/ros2_workspaces/src
+WORKDIR /home/$USER_NAME/ros2_workspaces
 
 # 3. Clone micro-ROS setup (Done as root to avoid permission jumping, chown later)
-WORKDIR /home/$USER_NAME/ros2_workspaces
-RUN git clone -b $ROS_DISTRO https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup
-
+RUN git clone -b $ROS_DISTRO https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup &&\
+    git clone https://github.com/f1tenth/f1tenth_gym_ros.git src/f1tenth_gym_ros && \
+    git clone https://github.com/ros-drivers/ackermann_msgs.git src/ackermann_msgs
+#check out the f1tenth_gym_ros repo...apparently just to test simulation it has to be to the path of the map!
+#https://github.com/f1tenth/f1tenth_gym_ros
+RUN sed -i "s|map_path: .*|map_path: '/home/$USER_NAME/ros2_workspaces/src/f1tenth_gym_ros/maps/levine'|g" src/f1tenth_gym_ros/config/sim.yaml
 # Install dependencies for the workspace
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     apt-get update && \
@@ -68,7 +70,7 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 #    git clone https://github.com/IEEE-UCF/SEC26Mirror.git /tmp/sec26mirror && \
 #    cd /tmp/sec26mirror && \
 #    git checkout 6e5be2c && \
-    rosdep install --from-paths ros2_ws/src --ignore-src -y --skip-keys ament_python || true && \
+#   rosdep install --from-paths ros2_ws/src --ignore-src -y --skip-keys ament_python || true && \
     cd / && \
 #   rm -rf /tmp/sec26mirror && \
     rm -rf /var/lib/apt/lists/*
@@ -81,7 +83,8 @@ USER $USER_NAME
 
 RUN rosdep update
 
-# 4. Build the Setup Workspace
+
+# 4. Build the MICROROS Setup Workspace
 RUN /bin/bash -c ". /opt/ros/$ROS_DISTRO/setup.bash && \
     cd /home/$USER_NAME/ros2_workspaces && \
     colcon build && \
@@ -89,6 +92,8 @@ RUN /bin/bash -c ". /opt/ros/$ROS_DISTRO/setup.bash && \
 
 # 5. Create and Build the Agent
 # Note: This creates a nested workspace 'microros_agent_ws' inside 'ros2_workspaces'
+#appears to also make it seem that wherever /opt/ros/humble/setup.bash is interlinked with
+#/home/ubuntu/ros2_workspaces/install/setup.bash
 RUN /bin/bash -c ". /opt/ros/$ROS_DISTRO/setup.bash && \
     . /home/$USER_NAME/ros2_workspaces/install/setup.bash && \
     cd /home/$USER_NAME/ros2_workspaces && \
@@ -133,9 +138,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-$ROS_DISTRO-navigation2 \
     ros-$ROS_DISTRO-nav2-bringup \
     ros-$ROS_DISTRO-xacro \
+    #manually install the yq binary for Jammy Jellyfish(22.04)
     python3-tk \
     x11-apps \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq \
+    && chmod +x /usr/bin/yq
+    # ros-$ROS_DISTRO-teleop \
 #Install f1tenth_gym and its numerical/rendering dependcies
 #check out https://github.com/f1tenth/f1tenth_gym/blob/main/setup.py
 # RUN pip3 install --no-cache-dir \
@@ -149,8 +159,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #     f1tenth-gym
 # Install the core F1TENTH Gym physics engine directly from source---there will be a setup.py script
 #that does the python installation for you!
-RUN pip3 install --no-cache-dir git+https://github.com/f1tenth/f1tenth_gym.git
-
+# RUN pip3 install --no-cache-dir git+https://github.com/f1tenth/f1tenth_gym.git
+RUN git clone https://github.com/f1tenth/f1tenth_gym.git /opt/f1tenth_gym && \
+    cd /opt/f1tenth_gym && \
+    pip3 install --no-cache-dir -e .
 
 USER $USER_NAME
 ENTRYPOINT ["/ros_entrypoint.sh"]
