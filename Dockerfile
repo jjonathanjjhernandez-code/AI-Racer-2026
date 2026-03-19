@@ -5,6 +5,10 @@ ARG USER_NAME=ubuntu
 ARG USER_UID=1000
 ARG USER_GID=1000
 ARG ROS_DISTRO=humble
+
+ENV LIBGL_ALWAYS_SOFTWARE=1
+ENV MESA_GL_VERSION_OVERRIDE=3.3
+
 # 1. Install dependencies (Root)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -36,6 +40,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxcb-keysyms1 \
     libxcb-randr0 \
     libxcb-render-util0 \
+    xvfb \
+    x11vnc \
+    libgl1-mesa-dri \
+    libgl1-mesa-glx \
     # Install git lfs
     && git lfs install \
     && apt-get clean \
@@ -104,7 +112,9 @@ RUN /bin/bash -c ". /opt/ros/$ROS_DISTRO/setup.bash && \
 # 6. Update .bashrc
 RUN echo "" >> /home/$USER_NAME/.bashrc && \
     echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USER_NAME/.bashrc && \
-    echo "source /home/$USER_NAME/ros2_workspaces/install/setup.bash" >> /home/$USER_NAME/.bashrc
+    echo "source /home/$USER_NAME/ros2_workspaces/install/setup.bash" >> /home/$USER_NAME/.bashrc && \
+    echo 'function vnc() { bash ~/scripts/start_vnc.sh && export DISPLAY=:99; }' >> /home/$USER_NAME/.bashrc
+
 #echo "source /home/$USER_NAME/ros2_workspaces/microros_agent_ws/install/setup.bash" >> /home/$USER_NAME/.bashrc
 
 # 7. Install PlatformIO via pipx
@@ -141,6 +151,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     #manually install the yq binary for Jammy Jellyfish(22.04)
     python3-tk \
     x11-apps \
+    xvfb \
+    x11vnc \
+    fluxbox \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq \
@@ -162,7 +175,7 @@ RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
 # RUN pip3 install --no-cache-dir git+https://github.com/f1tenth/f1tenth_gym.git
 RUN git clone https://github.com/f1tenth/f1tenth_gym.git /opt/f1tenth_gym && \
     cd /opt/f1tenth_gym && \
-    pip3 install --no-cache-dir -e .
+    pip3 install --no-cache-dir --default-timeout=120 -e .
 
 USER $USER_NAME
 ENTRYPOINT ["/ros_entrypoint.sh"]
