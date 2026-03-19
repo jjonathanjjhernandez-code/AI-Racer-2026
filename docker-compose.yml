@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
       target: ${BUILD_TARGET} 
     image: airacer:${BUILD_TARGET}
+    ports:
+      - "5900:5900"
     environment:
       #look inside of the .env file and you will see a varibale for BUILD_TARGET!
       # Pass the DISPLAY variable from the .env file into the container
