@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+	<name>ros_build_test</name>
+	<version>0.0.1</version>
+	<description>seeing_what_i_can_and_cannot_add_here</description>
+	<maintainer email="maintainers@example.com">SEC26</maintainer>
+	<license>MIT</license>
+
+	<buildtool_depend>ament_cmake</buildtool_depend><!-- part of the ro2 pkg as well!-->
+	<!-- <exec_depend>ros_gz_sim</exec_depend> -->
+	<exec_depend>ros2launch</exec_depend>
+	<depend>rclcpp</depend>
+	<depend>std_msgs</depend>
+    <depend>ackermann_msgs</depend>
+	<!-- <depend>geometry_msgs</depend>
+	<depend>sensor_msgs</depend> -->
+
+	<export>
+		<build_type>ament_cmake</build_type>
+		<gazebo_model_path>${prefix}/..</gazebo_model_path>
+	</export>
+</package>
+<!-- If you a standard ros2 pkg list in the terminal ros2 gives you an entire list of installed packages and what not to see what is installed
+take a close look and you'll see the depenedencies listed here are on that list! -->

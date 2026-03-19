@@ -12,6 +12,7 @@ services:
       - QT_X11_NO_MITSHM=1
       - ARDUINO_DIRECTORIES_USER=/home/ubuntu/.arduino15
       - PLATFORMIO_CORE_DIR=/home/ubuntu/.platformio
+      - LIBGL_ALWAYS_INDIRECT=1
     volumes:
       # --- Source Code (Synced with Host) ---
       # - ./ros2_ws/src:/home/ubuntu/ros2_workspaces/src/racer_ros:delegated
@@ -39,7 +40,7 @@ services:
       # --- System / Hardware ---
       - /dev:/dev
       - /sys:/sys
-      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
     # This uses the network mode from the .env file (either 'host' for Linux or 'bridge' for Win/Mac)
     network_mode: ${NETWORK_MODE_CONFIG}
     privileged: true
