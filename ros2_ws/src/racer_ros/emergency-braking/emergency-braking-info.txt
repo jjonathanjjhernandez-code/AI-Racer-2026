@@ -1,0 +1,56 @@
+What is Automatic Emergency Braking(AEB)?
+-Key Function:
+    --Notify drivers to engage brakes
+    --Mitigation for collisions
+
+AEB System Architecture
+--Perception Module
+    --Sensors
+        >LiIDAR
+        >Radar
+        >Cameras
+Our decesion module will determine the real processing, real-time collision algorithms and in turn activate
+the braking systems and control
+So the feedback loop goes from Sensors-->AEB Module-->Braking System
+
+So how does the Lidar work?
+    --light detection && ranging
+    --laser pulses to measure distances
+    --creates 2d/3d maps of surrondings
+Use for fast update rates....direct distance measurements.....high accuracy
+
+======LIDAR: How it works!=====
+Formula: Distance to obstacle = (speed of light * time travel)/2
+**Division by 2 accounts for round trip(360A scope??)
+Speed of light = 3*10^18m/s
+--Emits laser pulses
+--Produces scan of environment
+--Used for obstacle detection
+Range & Accuracy depends on:
+    --Laser pulse energy....the higher the better
+    --Signal-to-Noise-Ratio--less interference the better
+    --Target Reflectivity--darker the surface the more light waves it absorbs(walls are black...will this interfere??)
+    --Laser Divergence--beams can spread over certain amounts of distances!!
+    --Detector Sensitivity-- how strong the sensor can receive feedback!
+======Time to Collision=====
+Time remaining before two objects(ego-vehicle and obstacle) will collide, assuming
+both maintain their current direction & velocity
+The intensity of how close both objects are to each other is based on 4 thresholds
+1.Forward Collision Warning(FCW)
+//Partial Braking//
+2.TPB1--1st Stage
+3.TPB2--2nd Stage
+4.TPB3--Full Braking
+
+Time-to-Collision(TTC) Concept
+Formula: TTC = Distance to obstacle / Relative closing velocity
+ex) Distance: 50 meters
+    Ego-vehicle speed: 60km/h(16.7m/s)
+    Obstacle: statiionary
+    TTC = 50/16.7 = 3.0 seconds
+It is the time calculated remaining before two objects, will collide
+assuming no accelerations, and no steering changes(linear line).
+TTC(t) = ri(t)[range between vehicle and object]/{-*ri(t)[range rate between vehicle and object]}
+*ri(t)=Vxcos(theta i)
+Vx = Forward speed in the vehiclesm reference frame <--assuming for stationary obstacles!
+theta i = angle of the beams frmo obstacle to lidar scan

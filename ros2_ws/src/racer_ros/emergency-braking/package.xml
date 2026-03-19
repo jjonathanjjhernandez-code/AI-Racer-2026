@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+	<name>safety_node</name>
+	<version>0.0.1</version>
+	<description>seeing_what_i_can_and_cannot_add_here</description>
+	<maintainer email="maintainers@example.com">SEC26</maintainer>
+	<license>MIT</license>
+
+	<buildtool_depend>ament_cmake</buildtool_depend>
+	<exec_depend>ros_gz_sim</exec_depend>
+	<exec_depend>ros2launch</exec_depend>
+	<depend>rclcpp</depend>
+    <depend>rclcpy</depend>
+	<depend>std_msgs</depend>
+	<depend>ackermann_msgs</depend>
+    <!-- <depend>geometry_msgs</depend> -->
+	<!-- <depend>mcu_msgs</depend> -->
+	<!-- <depend>sensor_msgs</depend> -->
+	<export>
+		<build_type>ament_cmake</build_type>
+		<gazebo_model_path>${prefix}/..</gazebo_model_path>
+	</export>
+</package>
