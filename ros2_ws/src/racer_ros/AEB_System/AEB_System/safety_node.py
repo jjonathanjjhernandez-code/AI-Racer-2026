@@ -17,7 +17,7 @@ class SafetyNode(Node):
 
         # Declare parameters
         self.declare_parameter('ttc_threshold', 2.0)
-        self.declare_parameter('speed_threshold', 0.1)
+        self.declare_parameter('speed_threshold', 0.5)
 
         # Get parameters
         self.ttc_threshold = self.get_parameter('ttc_threshold').value
@@ -73,6 +73,10 @@ class SafetyNode(Node):
         # Calculate angle for each beam
         num_beams = len(ranges)
         angles = scan_msg.angle_min + np.arange(num_beams) * scan_msg.angle_increment
+        
+        
+        front_beams = np.abs(angles) < np.radians(30)
+        ranges[~front_beams] = np.inf
 
         # Calculate range rate for each beam
         # ṙ = -v_x * cos(θ)
