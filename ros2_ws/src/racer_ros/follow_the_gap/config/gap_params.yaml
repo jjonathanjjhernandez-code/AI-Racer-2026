@@ -1,0 +1,23 @@
+# Follow the Gap Parameters
+
+reactive_node:
+  ros__parameters:
+    # Safety bubble radius around closest obstacle (meters)
+    # Larger = more conservative, smaller gaps ignored
+    bubble_radius: 0.3
+
+    # Preprocessing window size for moving average
+    # Larger = smoother but less responsive
+    preprocess_conv_size: 3
+
+    # Maximum LiDAR range to consider (meters)
+    # Points beyond this are treated as max range
+    max_lidar_range: 3.0
+
+    # Speed limits (m/s)
+    speed_min: 0.5
+    speed_max: 2.0
+
+    # Steering gain (proportional control)
+    # Higher = more aggressive steering
+    steering_gain: 1.0
