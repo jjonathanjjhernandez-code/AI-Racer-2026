@@ -5,6 +5,7 @@ from rclpy.node import Node
 import numpy as np
 from sensor_msgs.msg import LaserScan
 from ackermann_msgs.msg import AckermannDriveStamped
+from std_msgs.msg import Float64
 
 
 class WallFollow(Node):
@@ -21,6 +22,7 @@ class WallFollow(Node):
         self.declare_parameter('desired_distance', 1.0)  # meters from wall
         self.declare_parameter('lookahead_distance', 1.0)  # meters
         self.declare_parameter('theta_deg', 50.0)  # angle for beam 'a' in degrees
+        self.declare_parameter('max_speed', 20.0)
 
         # Get parameters
         self.kp = self.get_parameter('kp').value
@@ -29,6 +31,8 @@ class WallFollow(Node):
         self.desired_distance = self.get_parameter('desired_distance').value
         self.lookahead_distance = self.get_parameter('lookahead_distance').value
         self.theta_deg = self.get_parameter('theta_deg').value
+        self.max_speed = self.get_parameter('max_speed').value
+
 
         # Convert theta to radians
         self.theta = np.deg2rad(self.theta_deg)
@@ -37,8 +41,7 @@ class WallFollow(Node):
         self.integral = 0.0
         self.prev_error = 0.0
         self.prev_time = None
-        self.max_speed = 20.0
-
+        
         # Create subscribers
         self.scan_sub = self.create_subscription(
             LaserScan,
@@ -51,6 +54,10 @@ class WallFollow(Node):
             AckermannDriveStamped,
             '/drive',
             10)
+        
+        self.error_pub = self.create_publisher(Float64, '/wall_follow/error', 10)
+        self.dist_pub = self.create_publisher(Float64, '/wall_follow/wall_distance', 10)
+        self.steering_pub = self.create_publisher(Float64, '/wall_follow/steering_angle', 10)
 
         self.get_logger().info('='*50)
         self.get_logger().info('Wall Follow Node Initialized')
@@ -60,7 +67,7 @@ class WallFollow(Node):
         self.get_logger().info(f'Theta: {self.theta_deg}°')
         self.get_logger().info('='*50)
 
-    def get_range(self, range_data, angle):
+    def get_range(self, range_data, angle, window=4):
         """
         Simple helper to return the corresponding range measurement at a given angle.
         Handles NaNs and Infs.
@@ -79,15 +86,16 @@ class WallFollow(Node):
         # Ensure index is within bounds
         angle_index = np.clip(angle_index, 0, len(range_data.ranges) - 1)
 
+        low = max(0, angle_index - window)
+        high = min(len(range_data.ranges), angle_index + window + 1)
+        
+        
         # Get range value
-        range_val = range_data.ranges[angle_index]
-
-        # Handle inf and nan
-        if np.isnan(range_val) or np.isinf(range_val):
+        range_val = [r for r in np.array(range_data.ranges)[low:high]
+                     if not np.isnan(r) and not np.isinf(r)]
             # Return a large value or max range
-            return range_data.range_max
 
-        return range_val
+        return np.mean(range_val) if range_val else range_data.range_max
 
     def get_error(self, range_data, dist):
         """
@@ -114,8 +122,8 @@ class WallFollow(Node):
         angle_a = angle_b + self.theta  # theta degrees forward from beam b
 
         # Get range measurements
-        b = self.get_range(range_data, angle_b)
-        a = self.get_range(range_data, angle_a)
+        b = self.get_range(range_data, angle_b, window=4)
+        a = self.get_range(range_data, angle_a, window=4)
 
         # Calculate alpha (angle between car's x-axis and the wall)
         # α = atan2((a*cos(θ) - b), (a*sin(θ)))
@@ -137,7 +145,7 @@ class WallFollow(Node):
         # Calculate error
         error = dist - D_t_plus_1
 
-        return error
+        return error, D_t
     
     
     def pid_control(self, error, max_velocity):
@@ -171,6 +179,9 @@ class WallFollow(Node):
 
         # Integral term (accumulate error over time)
         self.integral += error * dt
+        self.integral = max(-10.0, self.integral)
+        self.integral = min(10.0, self.integral)
+        
         I = self.ki * self.integral
 
         # Derivative term (rate of change of error)
@@ -181,30 +192,33 @@ class WallFollow(Node):
         angle = P + I + D
 
         # Clamp steering angle to reasonable limits (e.g., ±30 degrees)
-        max_steering_angle = np.deg2rad(30.0)
+        max_steering_angle = np.deg2rad(30.0 - 20.0 * (1.0))
+        
         angle = np.clip(angle, -max_steering_angle, max_steering_angle)
 
+        # smooth scaling around angles
+        final_velocity = max_velocity * np.clip(np.cos(angle) ** 2, 0.1, 1.0)
+        
+        adaptive_max_steer = np.deg2rad(30.0 - 20.0 * (final_velocity / max_velocity))
+        angle = np.clip(angle, -adaptive_max_steer, adaptive_max_steer)
+        
         # Update previous error
         self.prev_error = error
-        
-        # Adjust velocity based on steering angle magnitude
-        angle_deg = abs(np.rad2deg(angle))
-
-        if angle_deg < 10.0:
-            # Gentle steering → full speed
-            final_velocity = max_velocity
-        elif angle_deg < 20.0:
-            # Moderate steering → reduced speed
-            final_velocity = max_velocity/2
-        else:
-            # Sharp steering → slow speed
-            final_velocity = max_velocity/10
 
         # Log for debugging (throttled)
         self.get_logger().debug(
             f'Error: {error:.3f}m | P: {P:.3f} | I: {I:.3f} | D: {D:.3f} | '
             f'Angle: {np.rad2deg(angle):.1f}°',
             throttle_duration_sec=0.5)
+        
+        # Publish debug topics for live plotting
+        err_msg = Float64()
+        err_msg.data = error
+        self.error_pub.publish(err_msg)
+ 
+        steer_msg = Float64()
+        steer_msg.data = float(np.rad2deg(angle))
+        self.steering_pub.publish(steer_msg)
 
         # Create and publish drive message
         drive_msg = AckermannDriveStamped()
@@ -226,11 +240,22 @@ class WallFollow(Node):
         Returns:
             None
         """
+        
+        self.kp = self.get_parameter('kp').value
+        self.ki = self.get_parameter('ki').value
+        self.kd = self.get_parameter('kd').value
+        self.max_speed = self.get_parameter('max_speed').value
+        
+        self.desired_distance = self.get_parameter('desired_distance').value
+        self.lookahead_distance = self.get_parameter('lookahead_distance').value
+ 
         # Calculate error
-        error = self.get_error(msg, self.desired_distance)
-
-        # Calculate velocity based on error (simple step function)
-
+        error, wall_dist = self.get_error(msg, self.desired_distance)
+ 
+        # Publish wall distance for live plotting
+        dist_msg = Float64()
+        dist_msg.data = wall_dist
+        self.dist_pub.publish(dist_msg)
         # Apply PID control
         self.pid_control(error, self.max_speed)
 
