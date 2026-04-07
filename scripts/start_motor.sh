@@ -18,9 +18,8 @@ echo "This will open the VESC launch in the foreground."
 echo "Open a SECOND terminal and run inside the container:"
 echo "  source /opt/ros/humble/setup.bash"
 echo "  source ~/ros2_workspaces/install/setup.bash"
-echo "  sudo -E env PYTHONPATH=\$PYTHONPATH LD_LIBRARY_PATH=\$LD_LIBRARY_PATH python3 ~/controller_bridge.py"
+echo "  python3 ~/controller_bridge.py"
 echo ""
-echo "Starting VESC nodes..."
+echo "Starting VESC + LiDAR nodes..."
 
-sudo -E env PYTHONPATH=$PYTHONPATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH PATH=$PATH \
-    ros2 launch ~/scripts/motor_test_launch.py
+ros2 launch ~/scripts/motor_test_launch.py

@@ -8,8 +8,17 @@ def generate_launch_description():
         get_package_share_directory('f1tenth_stack'), 'config', 'vesc.yaml')
     mux_config = os.path.join(
         get_package_share_directory('f1tenth_stack'), 'config', 'mux.yaml')
+    urg_config = os.path.join(
+        get_package_share_directory('urg_node'), 'launch', 'urg_node_ethernet.yaml')
 
     return LaunchDescription([
+        Node(
+            package='urg_node',
+            executable='urg_node_driver',
+            name='urg_node',
+            parameters=[urg_config],
+            output='screen'
+        ),
         Node(
             package='vesc_driver',
             executable='vesc_driver_node',
