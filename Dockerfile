@@ -64,10 +64,16 @@ RUN mkdir -p /home/$USER_NAME/ros2_workspaces/src
 WORKDIR /home/$USER_NAME/ros2_workspaces
 
 # 3. Clone micro-ROS setup (Done as root to avoid permission jumping, chown later)
-RUN git clone -b $ROS_DISTRO https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup &&\
+RUN git clone -b $ROS_DISTRO https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup && \
     git clone https://github.com/f1tenth/f1tenth_gym_ros.git src/f1tenth_gym_ros && \
-    git clone https://github.com/ros-drivers/ackermann_msgs.git src/ackermann_msgs
-#check out the f1tenth_gym_ros repo...apparently just to test simulation it has to be to the path of the map!
+    git clone https://github.com/ros-drivers/ackermann_msgs.git src/ackermann_msgs && \
+    git clone https://github.com/Hokuyo-aut/urg_node2.git src/urg_node2 && \
+    rm -rf src/urg_node2/urg_library && \
+    git clone https://github.com/UrgNetwork/urg_library.git src/urg_library && \
+    touch src/urg_node2/config/ust10lx.yaml && \
+    cp src/urg_node2/config/params_ether.yaml src/urg_node2/config/ust10lx.yaml &&\
+    sed -i 's/angle_min.*/angle_min: -0.20944/' src/urg_node2/config/ust10lx.yaml && \
+    sed -i 's/angle_max.*/angle_max: 0.20944/' src/urg_node2/config/ust10lx.yaml \#check out the f1tenth_gym_ros repo...apparently just to test simulation it has to be to the path of the map!
 #https://github.com/f1tenth/f1tenth_gym_ros
 RUN sed -i "s|map_path: .*|map_path: '/home/$USER_NAME/ros2_workspaces/src/f1tenth_gym_ros/maps/levine'|g" src/f1tenth_gym_ros/config/sim.yaml
 # Install dependencies for the workspace
