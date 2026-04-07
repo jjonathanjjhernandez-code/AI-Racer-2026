@@ -2,38 +2,121 @@
 
 import os
 from launch import LaunchDescription
-from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node, LifecycleNode
+from launch.actions import TimerAction
+from launch_ros.actions import LifecycleTransitionAction
 from ament_index_python.packages import get_package_share_directory
 
+
 def generate_launch_description():
-    
+
     movement_dir = get_package_share_directory('movement_node')
     aeb_dir = get_package_share_directory('AEB_System')
-    
+    vesc_config = os.path.join(
+        get_package_share_directory('f1tenth_stack'), 'config', 'vesc.yaml')
+    mux_config = os.path.join(
+        get_package_share_directory('f1tenth_stack'), 'config', 'mux.yaml')
+
     safety_params = os.path.join(aeb_dir, 'config', 'safety_params.yaml')
     reactive_params = os.path.join(movement_dir, 'config', 'movement.yaml')
-    
+
+    # ── Lidar node (lifecycle) ──────────────────────────────────────
+    lidar_node = LifecycleNode(
+        package='urg_node2',
+        executable='urg_node2_node',
+        name='urg_node2_node',
+        namespace='',
+        output='screen',
+        parameters=[{
+            'ip_address': '192.168.0.10',
+            'ip_port': 10940,
+            'frame_id': 'laser',
+        }],
+        remappings=[('scan', '/scan')],
+    )
+
+    # Configure after 2s, activate after 4s — gives the node time to boot
+    lidar_configure = TimerAction(
+        period=2.0,
+        actions=[
+            LifecycleTransitionAction(
+                lifecycle_node_name='/urg_node2_node',
+                transition_id='configure',
+            )
+        ]
+    )
+
+    lidar_activate = TimerAction(
+        period=4.0,
+        actions=[
+            LifecycleTransitionAction(
+                lifecycle_node_name='/urg_node2_node',
+                transition_id='activate',
+            )
+        ]
+    )
+
+    # ── VESC / motor nodes ──────────────────────────────────────────
+    vesc_driver = Node(
+        package='vesc_driver',
+        executable='vesc_driver_node',
+        name='vesc_driver_node',
+        parameters=[vesc_config],
+        output='screen',
+    )
+
+    ackermann_to_vesc = Node(
+        package='vesc_ackermann',
+        executable='ackermann_to_vesc_node',
+        name='ackermann_to_vesc_node',
+        parameters=[vesc_config],
+        output='screen',
+    )
+
+    vesc_to_odom = Node(
+        package='vesc_ackermann',
+        executable='vesc_to_odom_node',
+        name='vesc_to_odom_node',
+        parameters=[vesc_config],
+        output='screen',
+    )
+
+    mux = Node(
+        package='ackermann_mux',
+        executable='ackermann_mux',
+        name='ackermann_mux',
+        parameters=[mux_config],
+        remappings=[('ackermann_cmd_out', 'ackermann_cmd')],
+        output='screen',
+    )
+
+    # ── Autonomy nodes ──────────────────────────────────────────────
     safety_node = Node(
-        package = 'AEB_System',
-        executable= 'safety_node',
+        package='AEB_System',
+        executable='safety_node',
         name='safety_node',
         output='screen',
         emulate_tty=True,
         parameters=[safety_params],
     )
-    
+
     movement_node = Node(
-        package = 'movement_node',
-        executable= 'trajectory',
+        package='movement_node',
+        executable='trajectory',
         name='trajectory',
         output='screen',
         emulate_tty=True,
         parameters=[reactive_params],
     )
-    
+
     return LaunchDescription([
+        lidar_node,
+        lidar_configure,
+        lidar_activate,
+        vesc_driver,
+        ackermann_to_vesc,
+        vesc_to_odom,
+        mux,
         safety_node,
-        movement_node
+        movement_node,
     ])
