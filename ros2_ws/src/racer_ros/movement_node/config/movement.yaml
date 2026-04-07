@@ -1,0 +1,37 @@
+# Wall Follow + Reactive Gap Combined Parameters
+
+trajectory:
+  ros__parameters:
+    # Wall Follow PID Controller ------------
+    kp: 0.830
+    ki: 0.2470
+    kd: 0.100
+
+    desired_distance: 1.2        # (meters)   from the right wall 
+    lookahead_distance: 2.0      # (meters)   lookahead
+    theta_deg: 35.0              # (degrees)  angle between two LiDAR beams 
+    max_speed: 8.5               # (m/s)      wall-follow max speed
+
+    # Follow the Gap configs --------------------
+    bubble_radius: 0.6           # (meters)   safety bubble
+    preprocess_conv_size: 3      #            window for lidar
+    max_lidar_range: 5.5         # (meters)   cliped lidar
+    speed_min: 0.5               # (m/s)      min speed
+    speed_max: 4.5               # (m/s)      max speed
+
+
+    steering_gain: 1.0           #            reactive steering gain
+    disparity_threshold: 0.5     # (meters)   disparity extender and how far to jump
+
+    # blending node ------------
+    # danger_threshold: closest obstacle distance that starts activating reactive mode
+    # blend_range: width of the smooth transition zone
+    #   - > danger_threshold                  ->  wall_follow
+    #   - < (danger_threshold - blend_range)  ->  follow the gap
+    #   - between                             ->  blend of both
+    danger_threshold: 0.6        # (meters)
+    blend_range: 1.25             # (meters)
+
+    min_wall_range: 0.15
+    max_wall_range: 4.75
+    wall_blend_alpha: 0.25

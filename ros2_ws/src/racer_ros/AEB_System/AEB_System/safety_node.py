@@ -63,6 +63,10 @@ class SafetyNode(Node):
         Process laser scan and trigger emergency brake if needed.
         Calculates iTTC for all beams and brakes if minimum is below threshold.
         """
+
+        self.ttc_threshold = self.get_parameter('ttc_threshold').value
+        self.speed_threshold = self.get_parameter('speed_threshold').value
+        
         # Skip processing if car is nearly stationary
         if abs(self.speed) < self.speed_threshold:
             return
@@ -75,9 +79,12 @@ class SafetyNode(Node):
         angles = scan_msg.angle_min + np.arange(num_beams) * scan_msg.angle_increment
         
         
-        front_beams = np.abs(angles) < np.radians(30)
-        ranges[~front_beams] = np.inf
-
+        # front================
+        front_half_angle = np.radians(10.0)
+        front_beams = np.abs(angles) < front_half_angle  
+              
+        # side================
+        side_beams = (np.abs(angles) > np.radians(15.0)) & (np.abs(angles) < np.radians(60.0))        
         # Calculate range rate for each beam
         # ṙ = -v_x * cos(θ)
         range_rates = -self.speed * np.cos(angles)
@@ -98,38 +105,72 @@ class SafetyNode(Node):
         invalid_ranges = (ranges < scan_msg.range_min) | (ranges > scan_msg.range_max)
         ittc[invalid_ranges] = np.inf
 
+
+        min_emergency_range = max(1.5, self.speed * 0.20)  # meters
+        far_away = ranges > min_emergency_range
+        ittc[far_away & front_beams] = np.inf
+
         # Find minimum iTTC
-        min_ittc = np.min(ittc)
+        min_forward_ittc = np.min(ittc[front_beams]) if front_beams.any() else np.inf
+        min_side_ittc = np.min(ittc[side_beams]) if side_beams.any() else np.inf
 
         # Debug logging
-        if min_ittc < self.ttc_threshold:
-            min_idx = np.argmin(ittc)
+        if min_forward_ittc < self.ttc_threshold:
+            front_ittc = ittc.copy()
+            front_ittc[~front_beams] = np.inf
+            min_idx = np.argmin(front_ittc)
             min_angle = angles[min_idx]
             min_range = ranges[min_idx]
 
             self.get_logger().warn(
-                f'Collision Warning! iTTC: {min_ittc:.3f}s | '
+                f'FRONT COLLISION AHHHHHHHHHHHHHh\n'
+                f'Collision Warning! iTTC: {min_forward_ittc:.3f}s | '
+                f'Range: {min_range:.2f}m | Angle: {np.degrees(min_angle):.1f}°',
+                throttle_duration_sec=0.5)
+        
+        # Debug logging
+        if min_side_ittc < self.ttc_threshold * 0.5:
+            side_ittc = ittc.copy()
+            side_ittc[~side_beams] = np.inf
+            min_idx = np.argmin(side_ittc)
+            min_angle = angles[min_idx]
+            min_range = ranges[min_idx]
+
+            self.get_logger().warn(
+                f'SIDE COLLISION (nothing much to worry about)\n'
+                f'Collision Warning! iTTC: {min_side_ittc:.3f}s | '
                 f'Range: {min_range:.2f}m | Angle: {np.degrees(min_angle):.1f}°',
                 throttle_duration_sec=0.5)
 
         # Trigger emergency brake if iTTC is below threshold
-        if min_ittc < self.ttc_threshold:
-            self.publish_brake()
-
-    def publish_brake(self):
+        if min_forward_ittc < self.ttc_threshold:
+            self.publish_brake(min_forward_ittc, self.ttc_threshold, emergency=True)
+        elif min_side_ittc < self.ttc_threshold * 0.5:
+            self.publish_brake(min_side_ittc, self.ttc_threshold, emergency=False)
+            
+    def publish_brake(self, min_ittc, threshold, emergency=True):
         """
         Publish emergency brake command (speed = 0).
         """
         brake_msg = AckermannDriveStamped()
         brake_msg.header.stamp = self.get_clock().now().to_msg()
         brake_msg.header.frame_id = 'base_link'
-        brake_msg.drive.speed = 0.0
-
-        self.brake_pub.publish(brake_msg)
-        self.get_logger().info(
-            '🛑 EMERGENCY BRAKE ACTIVATED! 🛑',
-            throttle_duration_sec=1.0)
-
+        if emergency:
+            # True emergency — hard stop (speed = 0)
+            # Don't do gradual braking that the wall follower can override
+            brake_speed = 0.0
+            self.get_logger().info(
+                f'EMERGENCY STOP | speed was: {self.speed:.2f} m/s',
+                throttle_duration_sec=1.0)
+        else:
+            # Side threat — reduce speed proportionally but don't stop
+            closeness = 1.0 - np.clip(min_ittc / threshold, 0.0, 1.0)
+            brake_speed = self.speed * (1.0 - closeness * 0.5)  # at most halve speed
+            brake_speed = max(brake_speed, 0.0)
+            self.get_logger().info(
+                f'SIDE BRAKE | reducing speed to: {brake_speed:.2f} m/s',
+                throttle_duration_sec=1.0)
+ 
 def main(args=None):
     rclpy.init(args=args)
     AEB_System = SafetyNode()
