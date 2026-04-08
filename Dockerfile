@@ -95,16 +95,16 @@ RUN git clone --recurse-submodules \
 RUN cp src/urg_node2/config/params_ether.yaml src/urg_node2/config/ust10lx.yaml && \
     sed -i 's/angle_min.*/angle_min: -0.20944/' src/urg_node2/config/ust10lx.yaml && \
     sed -i 's/angle_max.*/angle_max: 0.20944/' src/urg_node2/config/ust10lx.yaml
+# F1tenth stack
+RUN git clone --recurse-submodules https://github.com/f1tenth/f1tenth_system.git
 
-# VESC motor drivers
-RUN git clone -b ros2 https://github.com/f1tenth/vesc.git src/vesc && \
-    git clone https://github.com/f1tenth/ackermann_mux.git src/ackermann_mux
+# # VESC motor drivers
+# RUN git clone -b ros2 https://github.com/f1tenth/vesc.git src/vesc && \
+#     git clone https://github.com/f1tenth/ackermann_mux.git src/ackermann_mux
 
 # Fix f1tenth_gym_ros map path
 RUN sed -i "s|map_path: .*|map_path: '/home/${USER_NAME}/ros2_workspaces/src/f1tenth_gym_ros/maps/levine'|g" \
     src/f1tenth_gym_ros/config/sim.yaml
-# F1tenth stack
-RUN git clone --recurse-submodules https://github.com/f1tenth/f1tenth_system.git
 # =============================================================
 # 4. rosdep install
 # =============================================================
