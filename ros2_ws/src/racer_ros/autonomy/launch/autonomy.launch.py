@@ -87,7 +87,7 @@ def generate_launch_description():
         executable='ackermann_mux',
         name='ackermann_mux',
         parameters=[mux_config],
-        remappings=[('ackermann_cmd_out', 'ackermann_cmd')],
+        remappings=[('ackermann_drive_out', 'ackermann_cmd')],
         output='screen',
     )
 
