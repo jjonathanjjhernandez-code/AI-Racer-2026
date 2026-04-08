@@ -8,11 +8,7 @@ services:
     ports:
       - "5900:5900"
     network_mode: "host"
-<<<<<<< HEAD
-    dns: 
-=======
     dns:
->>>>>>> 5c3fc65047cdd46ff445393f37d35bf252d7e269
       - 8.8.8.8
     environment:
       #look inside of the .env file and you will see a varibale for BUILD_TARGET!
