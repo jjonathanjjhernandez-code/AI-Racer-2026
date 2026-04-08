@@ -76,7 +76,11 @@ def generate_launch_description():
             executable='ackermann_to_vesc_node',
             name='ackermann_to_vesc_node',
             parameters=[VESC_PARAMS],
+<<<<<<< HEAD
 	    remappings=[('ackermann_cmd', 'ackermann_drive')],
+=======
+            remappings=[('ackermann_cmd', 'ackermann_cmd_teleop')],
+>>>>>>> 4469169ccf90dbc261749f31165b742d46f4c582
             output='screen',
         ),
  
