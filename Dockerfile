@@ -104,7 +104,7 @@ RUN git clone -b ros2 https://github.com/f1tenth/vesc.git src/vesc && \
 RUN sed -i "s|map_path: .*|map_path: '/home/${USER_NAME}/ros2_workspaces/src/f1tenth_gym_ros/maps/levine'|g" \
     src/f1tenth_gym_ros/config/sim.yaml
 # F1tenth stack
-RUN git clone https://github.com/f1tenth/f1tenth_system.git
+RUN git clone --recurse-submodules https://github.com/f1tenth/f1tenth_system.git
 # =============================================================
 # 4. rosdep install
 # =============================================================
