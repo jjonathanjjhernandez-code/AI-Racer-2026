@@ -10,14 +10,14 @@ trajectory:
     desired_distance: 1.2        # (meters)   from the right wall 
     lookahead_distance: 2.0      # (meters)   lookahead
     theta_deg: 35.0              # (degrees)  angle between two LiDAR beams 
-    max_speed: 2.0               # (m/s)      wall-follow max speed
+    max_speed: 4.0               # (m/s)      wall-follow max speed
 
     # Follow the Gap configs --------------------
     bubble_radius: 0.6           # (meters)   safety bubble
     preprocess_conv_size: 3      #            window for lidar
     max_lidar_range: 5.5         # (meters)   cliped lidar
     speed_min: 0.5               # (m/s)      min speed
-    speed_max: 2.0               # (m/s)      max speed
+    speed_max: 4.0               # (m/s)      max speed
 
 
     steering_gain: 1.0           #            reactive steering gain
