@@ -96,7 +96,7 @@ RUN cp src/urg_node2/config/params_ether.yaml src/urg_node2/config/ust10lx.yaml 
     sed -i 's/angle_min.*/angle_min: -0.20944/' src/urg_node2/config/ust10lx.yaml && \
     sed -i 's/angle_max.*/angle_max: 0.20944/' src/urg_node2/config/ust10lx.yaml
 # F1tenth stack
-RUN git clone --recurse-submodules https://github.com/f1tenth/f1tenth_system.git
+RUN git clone --recurse-submodules https://github.com/f1tenth/f1tenth_system.git src/f1tenth_system
 
 # FIX: The default 'vesc' submodule in f1tenth_system is outdated and breaks on Humble.
 # We must delete it and clone the actively maintained 'ros2' branch directly.
