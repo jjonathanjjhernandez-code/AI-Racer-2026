@@ -30,6 +30,8 @@ def generate_launch_description():
             'ip_address': '192.168.0.10',
             'ip_port': 10940,
             'frame_id': 'laser',
+            'angle_min': -2.0944,
+            'angle_max': 2.0944,
         }],
         remappings=[('scan', '/scan')],
     )

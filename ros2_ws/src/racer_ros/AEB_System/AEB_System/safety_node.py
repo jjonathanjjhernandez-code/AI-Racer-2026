@@ -35,7 +35,7 @@ class SafetyNode(Node):
 
         self.odom_sub = self.create_subscription(
             Odometry,
-            '/ego_racecar/odom',
+            '/vesc/odom',
             self.odom_callback,
             10)
 
