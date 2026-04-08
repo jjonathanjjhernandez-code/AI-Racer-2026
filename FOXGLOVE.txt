@@ -1,0 +1,17 @@
+hel0!
+To run the foxglove configuration make sure you install the application first
+on your host computer
+foxglove.dev/download
+Now pretend you everything setup...host computer-->jetson ssh--> docker containtr inside jetson
+once inside the contianer MAKE SURE your ros2 nodes are up and running{does not matter which one
+but for this example initiate the lidar node....specifically}
+to initiate the lidar node....
+ros2 launch urg_node2 urg_node2.launch.py \ params_file:/home/ubuntu/ros2_workspaces/src/urg_node2/config/ust10lx.yml
+make sure the connection is established
+then on another terminal....
+ros2 run foxglove_bridge foxglove_bridge
+then go back to regular computer go to the fox glove app and look for the open connection button
+then when prompted do ws://100.110.159.80:8765
+{if you pay close attention the ip is the address of the jetson and the port is the one made when running
+the foxglove application}
+and voila....it should work from there

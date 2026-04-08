@@ -8,7 +8,11 @@ services:
     ports:
       - "5900:5900"
     network_mode: "host"
+<<<<<<< HEAD
     dns: 
+=======
+    dns:
+>>>>>>> 5c3fc65047cdd46ff445393f37d35bf252d7e269
       - 8.8.8.8
     environment:
       #look inside of the .env file and you will see a varibale for BUILD_TARGET!
@@ -46,7 +50,7 @@ services:
       - /sys:/sys
       - /tmp/.X11-unix:/tmp/.X11-unix
     # This uses the network mode from the .env file (either 'host' for Linux or 'bridge' for Win/Mac)
-    network_mode: ${NETWORK_MODE_CONFIG}
+    # network_mode: ${NETWORK_MODE_CONFIG}
     privileged: true
     # Keep the container running
     command: sleep infinity
