@@ -58,12 +58,20 @@ def generate_launch_description():
     )
 
     # ── VESC / motor nodes ──────────────────────────────────────────
-    vesc_driver = Node(
+    # Delay VESC driver by 8s so trajectory node has time to receive scan data
+    # and publish a valid drive command before the serial port opens.
+    # This prevents the 0.032578 default servo value from killing the VESC on startup.
+    vesc_driver_node = Node(
         package='vesc_driver',
         executable='vesc_driver_node',
         name='vesc_driver_node',
         parameters=[vesc_config],
         output='screen',
+    )
+
+    vesc_driver = TimerAction(
+        period=8.0,
+        actions=[vesc_driver_node],
     )
 
     ackermann_to_vesc = Node(
@@ -114,7 +122,7 @@ def generate_launch_description():
         lidar_node,
         lidar_configure,
         lidar_activate,
-        vesc_driver,
+        vesc_driver,          # delayed 8s
         ackermann_to_vesc,
         vesc_to_odom,
         mux,
