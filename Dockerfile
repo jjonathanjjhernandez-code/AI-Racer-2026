@@ -91,24 +91,48 @@ RUN git clone --recurse-submodules \
     https://github.com/Hokuyo-aut/urg_node2.git \
     src/urg_node2
 
-# Configure LiDAR FOV for UST-10LX (±12° = ±0.20944 rad)
+# Configure LiDAR FOV for UST-10LX (+-12deg = +-0.20944 rad)
 RUN cp src/urg_node2/config/params_ether.yaml src/urg_node2/config/ust10lx.yaml && \
     sed -i 's/angle_min.*/angle_min: -0.20944/' src/urg_node2/config/ust10lx.yaml && \
     sed -i 's/angle_max.*/angle_max: 0.20944/' src/urg_node2/config/ust10lx.yaml
+
 # F1tenth stack
 RUN git clone --recurse-submodules https://github.com/f1tenth/f1tenth_system.git src/f1tenth_system
 
-# FIX: The default 'vesc' submodule in f1tenth_system is outdated and breaks on Humble.
-# We must delete it and clone the actively maintained 'ros2' branch directly.
+# FIX: default vesc submodule in f1tenth_system is outdated on Humble
 RUN rm -rf src/f1tenth_system/vesc && \
     git clone -b ros2 https://github.com/f1tenth/vesc.git src/f1tenth_system/vesc
-# # VESC motor drivers
-# RUN git clone -b ros2 https://github.com/f1tenth/vesc.git src/vesc && \
-#     git clone https://github.com/f1tenth/ackermann_mux.git src/ackermann_mux
 
 # Fix f1tenth_gym_ros map path
 RUN sed -i "s|map_path: .*|map_path: '/home/${USER_NAME}/ros2_workspaces/src/f1tenth_gym_ros/maps/levine'|g" \
     src/f1tenth_gym_ros/config/sim.yaml
+
+# =============================================================
+# 3b. Patch vesc.yaml in-place for D3542 1450KV + DS3240 40kg
+#     Uses sed so the upstream file structure is preserved.
+#     All values match vesc.yaml generated for this hardware.
+# =============================================================
+RUN VESC_YAML=src/f1tenth_system/f1tenth_stack/config/vesc.yaml && \
+    # --- BLDC: D3542 1450KV, 7 pole pairs (14-pole motor) ---
+    sed -i 's/speed_to_erpm_gain:.*/speed_to_erpm_gain: 10150.0/'       $VESC_YAML && \
+    sed -i 's/speed_to_erpm_offset:.*/speed_to_erpm_offset: 0.0/'       $VESC_YAML && \
+    # --- Servo: DS3240 40kg, 500-2500us, neutral=1500us ---
+    # gain = 0.5 / 0.524 rad (+-30deg assumed throw) — re-measure and retune
+    sed -i 's/steering_angle_to_servo_gain:.*/steering_angle_to_servo_gain: -0.9549/'   $VESC_YAML && \
+    sed -i 's/steering_angle_to_servo_offset:.*/steering_angle_to_servo_offset: 0.5/'   $VESC_YAML && \
+    # --- Serial port ---
+    sed -i 's|port:.*|port: /dev/ttyACM0|'                              $VESC_YAML && \
+    # --- Current limits ---
+    sed -i 's/current_max:.*/current_max: 100.0/'                       $VESC_YAML && \
+    # --- Speed limits: 10150 * 2.5 m/s = 25375 erpm ---
+    sed -i 's/speed_min:.*/speed_min: -25375.0/'                        $VESC_YAML && \
+    sed -i 's/speed_max:.*/speed_max: 25375.0/'                         $VESC_YAML && \
+    # --- Servo range: DS3240 wider PWM range, protect hard stops ---
+    sed -i 's/servo_min:.*/servo_min: 0.10/'                            $VESC_YAML && \
+    sed -i 's/servo_max:.*/servo_max: 0.90/'                            $VESC_YAML && \
+    # --- Odometry ---
+    sed -i 's/wheelbase:.*/wheelbase: 0.25/'                            $VESC_YAML
+
 # =============================================================
 # 4. rosdep install
 # =============================================================
@@ -129,7 +153,7 @@ USER ${USER_NAME}
 
 RUN rosdep update
 
-# Build full workspace (includes micro_ros_setup, vesc, ackermann, lidar, etc.)
+# Build full workspace
 RUN /bin/bash -c "\
     . /opt/ros/${ROS_DISTRO}/setup.bash && \
     cd /home/${USER_NAME}/ros2_workspaces && \
@@ -175,7 +199,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # =============================================================
-# DEV target — adds RViz2, Nav2, Foxglove, F1Tenth gym, GUI tools
+# DEV target — RViz2, Nav2, Foxglove, F1Tenth gym, GUI tools
 # =============================================================
 FROM base AS dev
 
@@ -195,11 +219,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fluxbox \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# yq — YAML CLI tool (Jammy doesn't have it in apt)
-RUN wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 \
+# yq — ARM64 binary for Jetson TX2
+RUN wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_arm64 \
     -O /usr/bin/yq && chmod +x /usr/bin/yq
 
-# F1Tenth gym physics engine (Python, installs in-place)
+# F1Tenth gym physics engine
 RUN git clone https://github.com/f1tenth/f1tenth_gym.git /opt/f1tenth_gym && \
     pip3 install --no-cache-dir --default-timeout=120 -e /opt/f1tenth_gym
 
