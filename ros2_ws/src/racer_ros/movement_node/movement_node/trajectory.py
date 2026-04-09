@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
+from rcl_interfaces.msg import SetParametersResult
 
 import numpy as np
 from sensor_msgs.msg import LaserScan
@@ -13,7 +14,7 @@ from std_msgs.msg import Float64
 #   servo_min = 0.15  →  angle_max = (0.5304 - 0.15) / 0.6 = 0.634 rad
 #   servo_max = 0.85  →  angle_min = (0.5304 - 0.85) / 0.6 = -0.532 rad
 # Use 0.50 rad (~28.6°) with margin to stay well inside limits.
-STEER_MAX = 0.50   # radians
+STEER_MAX = 0.30   # radians
 
 
 class WallFollowReactive(Node):
@@ -56,6 +57,9 @@ class WallFollowReactive(Node):
         # -==- Load All Params -==-
         self._load_parameters()
 
+        # Re-load params only when they change, not on every scan callback
+        self.add_on_set_parameters_callback(self._on_parameters_changed)
+
         # -==- PID state -==-
         self.integral = 0.0
         self.prev_error = 0.0
@@ -66,8 +70,9 @@ class WallFollowReactive(Node):
         self.scan_sub = self.create_subscription(
             LaserScan, '/scan', self.scan_callback, 10)
 
+        # Publish to /drive_nav so the AEB safety node can intercept and override
         self.drive_pub = self.create_publisher(
-            AckermannDriveStamped, '/drive', 10)
+            AckermannDriveStamped, '/drive_nav', 10)
 
         # -==- Debugging pubs -==-
         self.error_pub = self.create_publisher(Float64, '/wall_follow/error', 10)
@@ -115,6 +120,10 @@ class WallFollowReactive(Node):
         self.wall_blend_alpha = self.get_parameter('wall_blend_alpha').value
         self.min_wall_range = self.get_parameter('min_wall_range').value
         self.max_wall_range = self.get_parameter('max_wall_range').value
+
+    def _on_parameters_changed(self, params):
+        self._load_parameters()
+        return SetParametersResult(successful=True)
 
     # -=====================- Wall Follow helpers -=====================-
     def get_range(self, range_data, angle, window=4):
@@ -277,12 +286,14 @@ class WallFollowReactive(Node):
         side_mask = np.abs(angles) > np.pi / 2
         proc[side_mask] = 0.0
 
-        nonzero = proc[proc > 0]
-        if len(nonzero) == 0:
+        nonzero_mask = proc > 0
+        if not nonzero_mask.any():
             return 0.0, 0.0
 
-        closest_dist = np.min(nonzero)
-        closest_idx = np.argmin(proc)
+        # argmin on the full proc (which has zeroed beams) would return a zero index,
+        # not the closest obstacle — find the true closest among non-zero beams only.
+        closest_idx = np.where(nonzero_mask)[0][np.argmin(proc[nonzero_mask])]
+        closest_dist = proc[closest_idx]
 
         bubble_idx = self.get_bubble_indices(data, closest_idx, closest_dist)
         proc[bubble_idx] = 0.0
@@ -316,8 +327,6 @@ class WallFollowReactive(Node):
 
     # -=====================- The Blend -=====================-
     def scan_callback(self, msg):
-        self._load_parameters()
-
         wf_error, wall_dist, right_Dt, left_Dt = self.get_wall_error(msg, self.desired_distance)
         wf_angle, wf_speed = self.wall_follow_control(wf_error)
 

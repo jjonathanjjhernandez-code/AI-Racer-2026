@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
+from rcl_interfaces.msg import SetParametersResult
 
 import numpy as np
 from sensor_msgs.msg import LaserScan
@@ -21,7 +22,10 @@ class SafetyNode(Node):
         self.ttc_threshold = self.get_parameter('ttc_threshold').value
         self.speed_threshold = self.get_parameter('speed_threshold').value
 
+        self.add_on_set_parameters_callback(self._on_parameters_changed)
+
         self.speed = 0.0
+        self.latest_nav_cmd = AckermannDriveStamped()  # last command from movement_node
 
         self.scan_sub = self.create_subscription(
             LaserScan, '/scan', self.scan_callback, 10)
@@ -29,7 +33,11 @@ class SafetyNode(Node):
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10)
 
-        # FIX: was 'brake_pub' but publish_brake used undefined 'self.drive_pub'
+        # Intercept movement_node commands and gate them through AEB
+        # movement_node publishes to /drive_nav; we forward to /drive (or replace with brake)
+        self.nav_sub = self.create_subscription(
+            AckermannDriveStamped, '/drive_nav', self.nav_callback, 10)
+
         self.drive_pub = self.create_publisher(
             AckermannDriveStamped, '/drive', 10)
 
@@ -39,14 +47,22 @@ class SafetyNode(Node):
         self.get_logger().info(f'Speed Threshold: {self.speed_threshold} m/s')
         self.get_logger().info('=' * 50)
 
+    def _on_parameters_changed(self, params):
+        self.ttc_threshold = self.get_parameter('ttc_threshold').value
+        self.speed_threshold = self.get_parameter('speed_threshold').value
+        return SetParametersResult(successful=True)
+
     def odom_callback(self, odom_msg):
         self.speed = odom_msg.twist.twist.linear.x
 
-    def scan_callback(self, scan_msg):
-        self.ttc_threshold = self.get_parameter('ttc_threshold').value
-        self.speed_threshold = self.get_parameter('speed_threshold').value
+    def nav_callback(self, drive_msg):
+        """Forward movement_node commands when AEB is not active."""
+        self.latest_nav_cmd = drive_msg
 
+    def scan_callback(self, scan_msg):
         if abs(self.speed) < self.speed_threshold:
+            # Car is slow/stationary — AEB not needed, but still forward nav command
+            self.drive_pub.publish(self.latest_nav_cmd)
             return
 
         ranges = np.array(scan_msg.ranges)
@@ -94,6 +110,9 @@ class SafetyNode(Node):
             self.publish_brake(min_forward_ittc, self.ttc_threshold, emergency=True)
         elif min_side_ittc < self.ttc_threshold * 0.5:
             self.publish_brake(min_side_ittc, self.ttc_threshold, emergency=False)
+        else:
+            # No collision threat — forward the latest navigation command unchanged
+            self.drive_pub.publish(self.latest_nav_cmd)
 
     def publish_brake(self, min_ittc, threshold, emergency=True):
         brake_msg = AckermannDriveStamped()

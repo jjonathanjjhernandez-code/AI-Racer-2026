@@ -41,15 +41,15 @@ def generate_launch_description():
         emulate_tty=True,
         parameters=[
             params_file,
-            # {
-            #     'ttc_threshold': LaunchConfiguration('ttc_threshold'),
-            #     'speed_threshold': LaunchConfiguration('speed_threshold'),
-            # }
+            {
+                'ttc_threshold': LaunchConfiguration('ttc_threshold'),
+                'speed_threshold': LaunchConfiguration('speed_threshold'),
+            }
         ]
     )
 
     return LaunchDescription([
-        # ttc_threshold_arg,
-        # speed_threshold_arg,
+        ttc_threshold_arg,
+        speed_threshold_arg,
         safety_node,
     ])
