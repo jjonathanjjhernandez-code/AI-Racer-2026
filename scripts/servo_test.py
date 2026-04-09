@@ -22,8 +22,8 @@ import rclpy
 from rclpy.node import Node
 from ackermann_msgs.msg import AckermannDriveStamped
 
-STEER_MIN_DEG = -5.0    # full right
-STEER_MAX_DEG = 15.0    # full left
+STEER_MIN_DEG = -2.0    # full right
+STEER_MAX_DEG = 12.0    # full left
 STEER_CENTER_DEG = 5.0  # mechanical center
 PUBLISH_TOPIC = '/ackermann_cmd'
 
