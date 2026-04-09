@@ -9,12 +9,10 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from std_msgs.msg import Float64
 
 
-# Hard steering limits derived from vesc.yaml calibration:
-#   servo = gain * angle + offset  →  servo = -0.6 * angle + 0.5304
-#   servo_min = 0.15  →  angle_max = (0.5304 - 0.15) / 0.6 = 0.634 rad
-#   servo_max = 0.85  →  angle_min = (0.5304 - 0.85) / 0.6 = -0.532 rad
-# Use 0.50 rad (~28.6°) with margin to stay well inside limits.
-STEER_MAX = 0.30   # radians
+# Physical steering limits (measured on car):
+#   max =  15° (full left),  min = -5° (full right),  center = 5°
+STEER_MAX = np.deg2rad(15.0)   # radians
+STEER_MIN = np.deg2rad(-5.0)   # radians
 
 
 class WallFollowReactive(Node):
@@ -89,7 +87,7 @@ class WallFollowReactive(Node):
         self.get_logger().info(f'Desired Wall Distance: {self.desired_distance}m')
         self.get_logger().info(f'Danger Threshold: {self.danger_threshold}m')
         self.get_logger().info(f'Bubble Radius: {self.bubble_radius}m')
-        self.get_logger().info(f'Servo-safe steering limit: ±{np.rad2deg(STEER_MAX):.1f}°')
+        self.get_logger().info(f'Steering limits: {np.rad2deg(STEER_MIN):.1f}° to {np.rad2deg(STEER_MAX):.1f}°')
         self.get_logger().info('=' * 55)
 
     # -=====================- Saving the params as values -=====================-
@@ -208,13 +206,13 @@ class WallFollowReactive(Node):
         D = self.kd * (error - self.prev_error) / dt
         self.prev_error = error
 
-        # Clamp to servo-safe limit
-        angle = np.clip(P + I + D, -STEER_MAX, STEER_MAX)
+        # Clamp to physical servo limits
+        angle = np.clip(P + I + D, STEER_MIN, STEER_MAX)
         speed = self.max_speed * np.clip(np.cos(angle) ** 3, 0.3, 1.0)
 
-        # Adaptive steering limit at high speed — also capped at STEER_MAX
-        adaptive_max = min(np.deg2rad(30.0 - 10.0 * (speed / self.max_speed)), STEER_MAX)
-        angle = np.clip(angle, -adaptive_max, adaptive_max)
+        # Adaptive steering limit at high speed — scale limits by speed fraction
+        adaptive_frac = np.clip(1.0 - 0.5 * (speed / self.max_speed), 0.0, 1.0)
+        angle = np.clip(angle, STEER_MIN * adaptive_frac, STEER_MAX * adaptive_frac)
 
         return angle, speed
 
@@ -305,8 +303,8 @@ class WallFollowReactive(Node):
         best_idx = self.find_best_point(start_i, end_i, proc)
         angle = self.steering_gain * (data.angle_min + best_idx * data.angle_increment)
 
-        # Clamp to servo-safe limit
-        angle = np.clip(angle, -STEER_MAX, STEER_MAX)
+        # Clamp to physical servo limits
+        angle = np.clip(angle, STEER_MIN, STEER_MAX)
 
         steer_mag = abs(angle)
         if steer_mag < np.deg2rad(5):
@@ -350,8 +348,8 @@ class WallFollowReactive(Node):
         final_angle = (1.0 - reactive_weight) * wf_angle + reactive_weight * rg_angle
         final_speed = (1.0 - reactive_weight) * wf_speed + reactive_weight * rg_speed
 
-        # HARD clamp — keeps servo in [0.15, 0.85] with margin
-        final_angle = np.clip(final_angle, -STEER_MAX, STEER_MAX)
+        # HARD clamp — physical servo limits
+        final_angle = np.clip(final_angle, STEER_MIN, STEER_MAX)
 
         self.current_speed = final_speed
 

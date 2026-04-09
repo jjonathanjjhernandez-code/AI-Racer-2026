@@ -20,7 +20,7 @@ import rclpy
 from rclpy.node import Node
 from ackermann_msgs.msg import AckermannDriveStamped
 
-SPEED_MAX = 4.0          # m/s — matches max_speed in movement.yaml
+SPEED_MAX = 2.5          # m/s
 PUBLISH_TOPIC = '/ackermann_cmd'
 
 
@@ -32,7 +32,7 @@ class MotorTester(Node):
         # Publish at 20 Hz so the VESC doesn't time out on the topic
         self.timer = self.create_timer(0.05, self._publish)
         self.get_logger().info(f'Publishing to {PUBLISH_TOPIC} at 20 Hz (steering=0)')
-        self.get_logger().info(f'Speed range: ±{SPEED_MAX} m/s')
+        self.get_logger().info(f'Speed range: 0 to {SPEED_MAX} m/s')
 
     def set_speed(self, speed: float):
         clamped = max(-SPEED_MAX, min(SPEED_MAX, speed))

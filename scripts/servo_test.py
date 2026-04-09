@@ -9,22 +9,22 @@ The script publishes AckermannDriveStamped to /ackermann_cmd (the topic
 ackermann_to_vesc_node subscribes to), bypassing the mux entirely.
 Speed is always 0 — only the servo moves.
 
-Enter angles in degrees (e.g. "15", "-20", "0").
+Enter angles in degrees (e.g. "10", "-5", "0").
 Ctrl+C to exit and center the servo.
 
-Servo safe range derived from vesc.yaml:
-    servo = -0.6 * angle_rad + 0.5304
-    servo_min=0.15  →  angle_max ≈  0.634 rad ( 36.3°)
-    servo_max=0.85  →  angle_min ≈ -0.532 rad (-30.5°)
-    We cap at ±28° to stay inside with margin.
+Physical limits:
+    max =  15° (full left)
+    min =  -5° (full right)
+    center = 5° (mechanical zero is not electrical zero)
 """
 
-import sys
 import rclpy
 from rclpy.node import Node
 from ackermann_msgs.msg import AckermannDriveStamped
 
-STEER_MAX_DEG = 28.0        # hard cap — matches STEER_MAX in trajectory.py
+STEER_MIN_DEG = -5.0    # full right
+STEER_MAX_DEG = 15.0    # full left
+STEER_CENTER_DEG = 5.0  # mechanical center
 PUBLISH_TOPIC = '/ackermann_cmd'
 
 
@@ -36,11 +36,11 @@ class ServoTester(Node):
         self.current_angle_rad = 0.0
         self.timer = self.create_timer(0.05, self._publish)
         self.get_logger().info(f'Publishing to {PUBLISH_TOPIC} at 20 Hz (speed=0)')
-        self.get_logger().info(f'Safe range: ±{STEER_MAX_DEG}°')
+        self.get_logger().info(f'Range: {STEER_MIN_DEG}° to {STEER_MAX_DEG}°, center={STEER_CENTER_DEG}°')
 
     def set_angle_deg(self, deg: float):
         import math
-        clamped = max(-STEER_MAX_DEG, min(STEER_MAX_DEG, deg))
+        clamped = max(STEER_MIN_DEG, min(STEER_MAX_DEG, deg))
         if clamped != deg:
             self.get_logger().warn(
                 f'Clamped {deg:.1f}° → {clamped:.1f}° (servo limit)')
@@ -48,7 +48,8 @@ class ServoTester(Node):
         self.get_logger().info(f'Steering set to {clamped:.1f}°')
 
     def center(self):
-        self.current_angle_rad = 0.0
+        import math
+        self.current_angle_rad = math.radians(STEER_CENTER_DEG)
         self._publish()
 
     def _publish(self):
@@ -68,8 +69,8 @@ def main():
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spin_thread.start()
 
-    print(f'\nServo Test — enter angle in degrees (±{STEER_MAX_DEG}°), or "q" to quit.')
-    print('Examples: "15"  "-20"  "0"\n')
+    print(f'\nServo Test — enter angle in degrees ({STEER_MIN_DEG}° to {STEER_MAX_DEG}°, center={STEER_CENTER_DEG}°), or "q" to quit.')
+    print('Examples: "15"  "-5"  "5"\n')
 
     try:
         while True:
