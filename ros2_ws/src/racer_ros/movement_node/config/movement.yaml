@@ -30,8 +30,8 @@ trajectory:
     #   < (danger_threshold-blend_range) → pure reactive (follow the gap)
     #   between                          → smooth blend
     # Side walls at 90° are excluded from closest calc so they don't trigger reactive.
-    danger_threshold: 1.0         # (meters) — frontal obstacle distance to start reacting
-    blend_range: 0.4              # (meters) — full reactive at (1.0 - 0.4) = 0.6m
+    danger_threshold: 0.6         # (meters) — frontal obstacle distance to start reacting
+    blend_range: 0.2              # (meters) — full reactive at (0.6 - 0.2) = 0.4m
 
     min_wall_range: 0.15
     max_wall_range: 4.75
