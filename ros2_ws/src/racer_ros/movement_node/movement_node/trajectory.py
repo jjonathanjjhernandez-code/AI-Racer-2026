@@ -64,16 +64,8 @@ class WallFollowReactive(Node):
         self.prev_time = None
         self.current_speed = 0.0
 
-        # -==- Startup centering state -==-
-        # Hold speed=0 and steer toward corridor center until settled.
-        self.centering = True
-        self.center_settled_count = 0
-        CENTER_SETTLE_REQUIRED = 20   # consecutive scans within threshold (~2–4s)
-        CENTER_ERROR_THRESHOLD = 0.15  # meters — close enough to center
-        CENTER_KP = 1.5               # proportional gain for centering steer
-        self._CENTER_SETTLE_REQUIRED = CENTER_SETTLE_REQUIRED
-        self._CENTER_ERROR_THRESHOLD = CENTER_ERROR_THRESHOLD
-        self._CENTER_KP = CENTER_KP
+        # Centering phase disabled — car cannot reposition while stationary
+        self.centering = False
 
         # -==- Pubs and Subs -==-
         self.scan_sub = self.create_subscription(
