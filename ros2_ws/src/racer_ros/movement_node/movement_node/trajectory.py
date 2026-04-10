@@ -64,6 +64,17 @@ class WallFollowReactive(Node):
         self.prev_time = None
         self.current_speed = 0.0
 
+        # -==- Startup centering state -==-
+        # Hold speed=0 and steer toward corridor center until settled.
+        self.centering = True
+        self.center_settled_count = 0
+        CENTER_SETTLE_REQUIRED = 20   # consecutive scans within threshold (~2–4s)
+        CENTER_ERROR_THRESHOLD = 0.15  # meters — close enough to center
+        CENTER_KP = 1.5               # proportional gain for centering steer
+        self._CENTER_SETTLE_REQUIRED = CENTER_SETTLE_REQUIRED
+        self._CENTER_ERROR_THRESHOLD = CENTER_ERROR_THRESHOLD
+        self._CENTER_KP = CENTER_KP
+
         # -==- Pubs and Subs -==-
         self.scan_sub = self.create_subscription(
             LaserScan, '/scan', self.scan_callback, 10)
@@ -328,13 +339,61 @@ class WallFollowReactive(Node):
         return angle, speed
 
     # -=====================- The Blend -=====================-
+    def _publish_zero_drive(self, steering_angle=0.0):
+        msg = AckermannDriveStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'base_link'
+        msg.drive.speed = 0.0
+        msg.drive.steering_angle = float(np.clip(steering_angle, STEER_MIN, STEER_MAX))
+        self.drive_pub.publish(msg)
+
     def scan_callback(self, msg):
+        # ── Startup centering phase ──────────────────────────────────────────
+        # Hold speed=0 and steer toward corridor center until the car is
+        # roughly centered for CENTER_SETTLE_REQUIRED consecutive scans.
+        if self.centering:
+            _, _, right_Dt, left_Dt = self.get_wall_error(msg, self.desired_distance)
+
+            if right_Dt is not None and left_Dt is not None:
+                # Positive error → too close to right wall → steer left (positive angle)
+                centering_error = (right_Dt - left_Dt) / 2.0
+                center_angle = self._CENTER_KP * centering_error
+                self._publish_zero_drive(center_angle)
+
+                if abs(centering_error) < self._CENTER_ERROR_THRESHOLD:
+                    self.center_settled_count += 1
+                else:
+                    self.center_settled_count = 0  # reset if drifted out
+
+                self.get_logger().info(
+                    f'[CENTERING] right={right_Dt:.2f}m left={left_Dt:.2f}m '
+                    f'err={centering_error:+.3f}m angle={np.rad2deg(center_angle):.1f}° '
+                    f'settled={self.center_settled_count}/{self._CENTER_SETTLE_REQUIRED}',
+                    throttle_duration_sec=0.25)
+
+                if self.center_settled_count >= self._CENTER_SETTLE_REQUIRED:
+                    self.centering = False
+                    self.get_logger().info('=' * 55)
+                    self.get_logger().info('[CENTERING] Complete — releasing to autonomy')
+                    self.get_logger().info('=' * 55)
+            else:
+                # Can't see both walls yet — hold still
+                self._publish_zero_drive(0.0)
+                self.get_logger().info(
+                    '[CENTERING] Waiting for both walls…',
+                    throttle_duration_sec=0.5)
+            return
+        # ────────────────────────────────────────────────────────────────────
+
         wf_error, wall_dist, right_Dt, left_Dt = self.get_wall_error(msg, self.desired_distance)
         wf_angle, wf_speed = self.wall_follow_control(wf_error)
 
         ranges = np.array(msg.ranges)
-        # Filter by range_min to exclude the car's own chassis returning ~0m readings
-        valid = ranges[np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= msg.range_max)]
+        num_beams = len(ranges)
+        angles = msg.angle_min + np.arange(num_beams) * msg.angle_increment
+        # Only look at ±90° for reactive triggering — side walls shouldn't count
+        front_mask = np.abs(angles) <= np.pi / 2
+        valid = ranges[front_mask & np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= msg.range_max)]
         closest = np.min(valid) if len(valid) > 0 else self.max_lidar_range
 
         lower = self.danger_threshold - self.blend_range

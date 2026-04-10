@@ -14,9 +14,9 @@ trajectory:
     #   3. Time one full oscillation (left→right→left) in seconds → that is Tu
     #   4. Apply: kp = 0.6*Ku, ki = 1.2*Ku/Tu, kd = 0.075*Ku*Tu
     #   5. Also reduce max_speed to 1.0 during tuning runs for safety
-    kp: 0.06
+    kp: 0.12
     ki: 0.0
-    kd: 0.0
+    kd: 0.065
 
     desired_distance: 1.2        # (meters)   from the right wall
     lookahead_distance: 2.0      # (meters)   lookahead
@@ -41,8 +41,8 @@ trajectory:
     #   - < (danger_threshold - blend_range)  ->  follow the gap  (full reactive)
     #   - between                             ->  blend of both
     # BUG FIX: old blend_range=1.25 > danger_threshold=0.6 so reactive never hit 100%
-    danger_threshold: 1.25        # (meters)
-    blend_range: 0.6             # (meters)  — lower = 1.0-0.4 = 0.6m triggers full reactive
+    danger_threshold: 0.8        # (meters)
+    blend_range: 0.3             # (meters)  — lower = 1.0-0.4 = 0.6m triggers full reactive
 
     min_wall_range: 0.15
     max_wall_range: 4.75
