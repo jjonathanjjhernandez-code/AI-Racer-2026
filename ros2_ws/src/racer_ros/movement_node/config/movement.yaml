@@ -3,13 +3,17 @@
 trajectory:
   ros__parameters:
     # Wall Follow PID Controller ------------
-    kp: 0.830
-    ki: 0.2470
-    kd: 0.100
+    # NOTE: Kp rescaled for 12deg servo range. Old Kp=0.83 saturated at 0.25m error.
+    # With STEER_MAX=0.209 rad and typical max error ~1.0m: Kp_max = 0.209/1.0 = 0.21
+    # Start conservative. Tune Kp up until oscillation, then back off 30%.
+    # Keep Ki=0 until P+D is stable — Ki was causing integral windup oscillation.
+    kp: 0.15
+    ki: 0.0
+    kd: 0.05
 
-    desired_distance: 1.2        # (meters)   from the right wall 
+    desired_distance: 1.2        # (meters)   from the right wall
     lookahead_distance: 2.0      # (meters)   lookahead
-    theta_deg: 35.0              # (degrees)  angle between two LiDAR beams 
+    theta_deg: 35.0              # (degrees)  angle between two LiDAR beams
     max_speed: 2.5               # (m/s)      wall-follow max speed
 
     # Follow the Gap configs --------------------
@@ -25,12 +29,13 @@ trajectory:
 
     # blending node ------------
     # danger_threshold: closest obstacle distance that starts activating reactive mode
-    # blend_range: width of the smooth transition zone
+    # blend_range: width of the smooth transition zone — MUST be < danger_threshold
     #   - > danger_threshold                  ->  wall_follow
-    #   - < (danger_threshold - blend_range)  ->  follow the gap
+    #   - < (danger_threshold - blend_range)  ->  follow the gap  (full reactive)
     #   - between                             ->  blend of both
-    danger_threshold: 0.6        # (meters)
-    blend_range: 1.25             # (meters)
+    # BUG FIX: old blend_range=1.25 > danger_threshold=0.6 so reactive never hit 100%
+    danger_threshold: 1.0        # (meters)
+    blend_range: 0.4             # (meters)  — lower = 1.0-0.4 = 0.6m triggers full reactive
 
     min_wall_range: 0.15
     max_wall_range: 4.75

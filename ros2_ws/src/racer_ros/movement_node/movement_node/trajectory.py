@@ -201,12 +201,16 @@ class WallFollowReactive(Node):
             self.prev_time = current_time
 
         P = self.kp * error
-        self.integral = np.clip(self.integral + error * dt, -10.0, 10.0)
-        I = self.ki * self.integral
         D = self.kd * (error - self.prev_error) / dt
         self.prev_error = error
 
-        # Clamp to physical servo limits
+        raw = P + self.ki * self.integral + D
+
+        # Anti-windup: only accumulate integral when output is NOT saturated
+        if STEER_MIN < raw < STEER_MAX:
+            self.integral = np.clip(self.integral + error * dt, -5.0, 5.0)
+
+        I = self.ki * self.integral
         angle = np.clip(P + I + D, STEER_MIN, STEER_MAX)
         speed = self.max_speed * np.clip(np.cos(angle) ** 3, 0.3, 1.0)
 
