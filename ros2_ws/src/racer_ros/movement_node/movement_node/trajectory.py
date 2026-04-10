@@ -333,7 +333,8 @@ class WallFollowReactive(Node):
         wf_angle, wf_speed = self.wall_follow_control(wf_error)
 
         ranges = np.array(msg.ranges)
-        valid = ranges[np.isfinite(ranges) & (ranges > 0)]
+        # Filter by range_min to exclude the car's own chassis returning ~0m readings
+        valid = ranges[np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= msg.range_max)]
         closest = np.min(valid) if len(valid) > 0 else self.max_lidar_range
 
         lower = self.danger_threshold - self.blend_range
