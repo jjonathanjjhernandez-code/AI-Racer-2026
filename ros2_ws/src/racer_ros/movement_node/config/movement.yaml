@@ -13,14 +13,14 @@ trajectory:
     desired_distance: 0.9         # (meters)   fallback when only one wall visible
     lookahead_distance: 1.5       # (meters)   lookahead
     theta_deg: 45.0               # (degrees)  angle between two LiDAR beams
-    max_speed: 0.8                # (m/s)      raise in 0.2 steps after PID is stable
+    max_speed: 2.0                # (m/s)      raise in 0.5 steps after PID is stable
 
     # Follow the Gap configs --------------------
     bubble_radius: 0.4            # (meters)   safety bubble around closest obstacle
     preprocess_conv_size: 3       #            smoothing window
     max_lidar_range: 5.5          # (meters)   clip range
-    speed_min: 0.3                # (m/s)      min reactive speed
-    speed_max: 0.8                # (m/s)      max reactive speed — keep equal to max_speed
+    speed_min: 1.0                # (m/s)      min reactive speed
+    speed_max: 2.0                # (m/s)      max reactive speed — keep equal to max_speed
 
     steering_gain: 1.0            #            reactive steering scale
     disparity_threshold: 0.5      # (meters)   disparity extender jump threshold
