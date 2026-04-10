@@ -22,7 +22,7 @@ import rclpy
 from rclpy.node import Node
 from ackermann_msgs.msg import AckermannDriveStamped
 
-STEER_CENTER_DEG = -3.0  # mechanical center
+STEER_CENTER_DEG = 1.0  # mechanical center
 PUBLISH_TOPIC = '/ackermann_cmd'
 
 

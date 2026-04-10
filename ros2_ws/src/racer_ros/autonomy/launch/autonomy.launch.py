@@ -36,9 +36,10 @@ def generate_launch_description():
         remappings=[('scan', '/scan')],
     )
 
-    # Configure after 2s, activate after 4s
+    # Jetson takes ~3s to connect to lidar hardware.
+    # Configure at 4s (safely after connection), activate at 7s (3s after configure).
     lidar_configure = TimerAction(
-        period=2.0,
+        period=4.0,
         actions=[
             ExecuteProcess(
                 cmd=['ros2', 'lifecycle', 'set', '/urg_node2_node', 'configure'],
@@ -48,7 +49,7 @@ def generate_launch_description():
     )
 
     lidar_activate = TimerAction(
-        period=4.0,
+        period=7.0,
         actions=[
             ExecuteProcess(
                 cmd=['ros2', 'lifecycle', 'set', '/urg_node2_node', 'activate'],
@@ -58,9 +59,9 @@ def generate_launch_description():
     )
 
     # ── VESC / motor nodes ──────────────────────────────────────────
-    # Delay VESC driver by 8s so trajectory node has time to receive scan data
-    # and publish a valid drive command before the serial port opens.
-    # This prevents the 0.032578 default servo value from killing the VESC on startup.
+    # Delay VESC driver until after lidar is active (t=7s) and trajectory node
+    # has had time to receive scan data and publish a valid drive command.
+    # This prevents the default servo value from killing the VESC on startup.
     vesc_driver_node = Node(
         package='vesc_driver',
         executable='vesc_driver_node',
@@ -70,7 +71,7 @@ def generate_launch_description():
     )
 
     vesc_driver = TimerAction(
-        period=8.0,
+        period=10.0,
         actions=[vesc_driver_node],
     )
 
