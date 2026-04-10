@@ -3,47 +3,37 @@
 trajectory:
   ros__parameters:
     # Wall Follow PID Controller ------------
-    # Ziegler-Nichols tuning — STEER_MAX=5deg (0.087 rad), STEER_MIN=-9deg (-0.157 rad)
-    # Saturation point: error = STEER_MAX / Kp = 0.087 / Kp
-    #   Kp=0.06 → saturates at 1.45m error (safe, won't saturate in normal driving)
-    #   Kp=0.15 → saturates at 0.58m error (too aggressive for 14deg range)
-    #
-    # Z-N process:
-    #   1. Run with these values. Car should track wall with gentle corrections.
-    #   2. Increase kp by 0.01 each run until car oscillates at constant amplitude → that is Ku
-    #   3. Time one full oscillation (left→right→left) in seconds → that is Tu
-    #   4. Apply: kp = 0.6*Ku, ki = 1.2*Ku/Tu, kd = 0.075*Ku*Tu
-    #   5. Also reduce max_speed to 1.0 during tuning runs for safety
-    kp: 0.12
+    # Ziegler-Nichols tuning — STEER_MAX=8deg, STEER_MIN=-7deg
+    # Increase kp by 0.01 each run until oscillation → that is Ku
+    # Then: kp = 0.6*Ku, ki = 1.2*Ku/Tu, kd = 0.075*Ku*Tu
+    kp: 0.07
     ki: 0.0
-    kd: 0.065
+    kd: 0.0065
 
-    desired_distance: 1.2        # (meters)   from the right wall
-    lookahead_distance: 2.0      # (meters)   lookahead
-    theta_deg: 35.0              # (degrees)  angle between two LiDAR beams
-    max_speed: 1.0               # (m/s)      TUNING: lower for safety, raise after PID is stable
+    desired_distance: 0.9         # (meters)   fallback when only one wall visible
+    lookahead_distance: 1.5       # (meters)   lookahead
+    theta_deg: 45.0               # (degrees)  angle between two LiDAR beams
+    max_speed: 0.8                # (m/s)      raise in 0.2 steps after PID is stable
 
     # Follow the Gap configs --------------------
-    bubble_radius: 0.6           # (meters)   safety bubble
-    preprocess_conv_size: 3      #            window for lidar
-    max_lidar_range: 5.5         # (meters)   cliped lidar
-    speed_min: 0.5               # (m/s)      min speed
-    speed_max: 2.5               # (m/s)      max speed
+    bubble_radius: 0.4            # (meters)   safety bubble around closest obstacle
+    preprocess_conv_size: 3       #            smoothing window
+    max_lidar_range: 5.5          # (meters)   clip range
+    speed_min: 0.3                # (m/s)      min reactive speed
+    speed_max: 0.8                # (m/s)      max reactive speed — keep equal to max_speed
 
+    steering_gain: 1.0            #            reactive steering scale
+    disparity_threshold: 0.5      # (meters)   disparity extender jump threshold
 
-    steering_gain: 1.0           #            reactive steering gain
-    disparity_threshold: 0.5     # (meters)   disparity extender and how far to jump
-
-    # blending node ------------
-    # danger_threshold: closest obstacle distance that starts activating reactive mode
-    # blend_range: width of the smooth transition zone — MUST be < danger_threshold
-    #   - > danger_threshold                  ->  wall_follow
-    #   - < (danger_threshold - blend_range)  ->  follow the gap  (full reactive)
-    #   - between                             ->  blend of both
-    # BUG FIX: old blend_range=1.25 > danger_threshold=0.6 so reactive never hit 100%
-    danger_threshold: 0.8        # (meters)
-    blend_range: 0.3             # (meters)  — lower = 1.0-0.4 = 0.6m triggers full reactive
+    # Blending: reactive activates when a FRONTAL obstacle (±60°) is within danger_threshold
+    #   > danger_threshold               → pure wall_follow
+    #   < (danger_threshold-blend_range) → pure reactive (follow the gap)
+    #   between                          → smooth blend
+    # Side walls at 90° are excluded from closest calc so they don't trigger reactive.
+    danger_threshold: 1.0         # (meters) — frontal obstacle distance to start reacting
+    blend_range: 0.4              # (meters) — full reactive at (1.0 - 0.4) = 0.6m
 
     min_wall_range: 0.15
     max_wall_range: 4.75
-    wall_blend_alpha: 1.0        # 1.0 = pure corridor centering, 0.0 = pure right-wall tracking
+    wall_blend_alpha: 1.0         # 1.0 = pure corridor centering (equidistant from both walls)
+                                  # 0.0 = pure right-wall tracking at desired_distance

@@ -395,8 +395,8 @@ class WallFollowReactive(Node):
         ranges = np.array(msg.ranges)
         num_beams = len(ranges)
         angles = msg.angle_min + np.arange(num_beams) * msg.angle_increment
-        # Only look at ±90° for reactive triggering — side walls shouldn't count
-        front_mask = np.abs(angles) <= np.pi / 2
+        # Only look at ±60° for reactive triggering — ±90° includes side walls at 0.85m
+        front_mask = np.abs(angles) <= np.pi / 3
         valid = ranges[front_mask & np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= msg.range_max)]
         closest = np.min(valid) if len(valid) > 0 else self.max_lidar_range
 
