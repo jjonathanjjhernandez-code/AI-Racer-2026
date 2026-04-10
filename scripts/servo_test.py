@@ -22,7 +22,7 @@ import rclpy
 from rclpy.node import Node
 from ackermann_msgs.msg import AckermannDriveStamped
 
-STEER_CENTER_DEG = 5.0  # mechanical center
+STEER_CENTER_DEG = -3.0  # mechanical center
 PUBLISH_TOPIC = '/ackermann_cmd'
 
 
@@ -64,7 +64,7 @@ def main():
     spin_thread.start()
 
     print(f'\nServo Test — enter angle in degrees (center={STEER_CENTER_DEG}°), or "q" to quit.')
-    print('Examples: "10"  "-2"  "5"\n')
+    print('Examples: "5"  "-9"  "-3"\n')
 
     try:
         while True:

@@ -10,9 +10,9 @@ from std_msgs.msg import Float64
 
 
 # Physical steering limits (measured on car):
-#   max =  12° (full left),  min = -2° (full right),  center = 5°
-STEER_MAX = np.deg2rad(12.0)   # radians
-STEER_MIN = np.deg2rad(-2.0)   # radians
+#   max =  5° (full left),  min = -9° (full right),  center = -3°
+STEER_MAX = np.deg2rad(5.0)    # radians
+STEER_MIN = np.deg2rad(-9.0)   # radians
 
 
 class WallFollowReactive(Node):
