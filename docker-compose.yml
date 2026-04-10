@@ -7,6 +7,9 @@ services:
     image: airacer:${BUILD_TARGET}
     ports:
       - "5900:5900"
+    network_mode: "host"
+    dns:
+      - 8.8.8.8
     environment:
       #look inside of the .env file and you will see a varibale for BUILD_TARGET!
       # Pass the DISPLAY variable from the .env file into the container
@@ -43,7 +46,7 @@ services:
       - /sys:/sys
       - /tmp/.X11-unix:/tmp/.X11-unix
     # This uses the network mode from the .env file (either 'host' for Linux or 'bridge' for Win/Mac)
-    network_mode: ${NETWORK_MODE_CONFIG}
+    # network_mode: ${NETWORK_MODE_CONFIG}
     privileged: true
     # Keep the container running
     command: sleep infinity

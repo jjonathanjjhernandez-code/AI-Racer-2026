@@ -1,6 +1,11 @@
-# FROM ros:jazzy-ros-base AS base
+# =============================================================
+# AI-Racer-2026 Dockerfile
+# Base: ROS2 Humble
+# Targets: base, dev, prod
+# =============================================================
+
 FROM ros:humble-ros-base AS base
-# Add build arguments for user selection (use existing ubuntu user)
+
 ARG USER_NAME=ubuntu
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -8,28 +13,33 @@ ARG ROS_DISTRO=humble
 
 ENV LIBGL_ALWAYS_SOFTWARE=1
 ENV MESA_GL_VERSION_OVERRIDE=3.3
+ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. Install dependencies (Root)
+# =============================================================
+# 1. System dependencies (root)
+# =============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Core tools
     git \
+    git-lfs \
     sudo \
-    openssh-client \
     curl \
+    wget \
     unzip \
     ca-certificates \
-    wget \
     coreutils \
+    nano \
+    pipx \
+    # Build tools
+    build-essential \
     python3-pip \
     gdb \
+    # Networking/debug
     iputils-ping \
     net-tools \
     usbutils \
-    build-essential \
-    nano \
-    # yq \
-    git-lfs \
-    pipx \
-    # Qt/X11 runtime dependencies
+    openssh-client \
+    # Qt/X11 runtime (for GUI passthrough)
     libxcb1 \
     libx11-xcb1 \
     libxcb-glx0 \
@@ -44,111 +54,164 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     x11vnc \
     libgl1-mesa-dri \
     libgl1-mesa-glx \
-    # Install git lfs
+    # VESC driver deps — must come before colcon build
+    ros-humble-asio-cmake-module \
+    ros-humble-io-context \
+    ros-humble-serial-driver \
+    ros-humble-udp-msgs \
     && git lfs install \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-# RUN apt-get install -y \
-#     ros-humble-teleop \
-#     ros-humble-yq
 
-# 2.Create the user/group
-# Configure passwordless sudo for the user
+# =============================================================
+# 2. Create user with passwordless sudo
+# =============================================================
 RUN groupadd --gid ${USER_GID} ${USER_NAME} \
-    && useradd --uid $USER_UID --gid ${USER_GID} -m -s /bin/bash ${USER_NAME} \
+    && useradd --uid ${USER_UID} --gid ${USER_GID} -m -s /bin/bash ${USER_NAME} \
     && echo "${USER_NAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME} \
-    &&chmod 0440 /etc/sudoers.d/${USER_NAME}
+    && chmod 0440 /etc/sudoers.d/${USER_NAME}
 
-# Setup directory
-RUN mkdir -p /home/$USER_NAME/ros2_workspaces/src
-WORKDIR /home/$USER_NAME/ros2_workspaces
+# =============================================================
+# 3. Clone all ROS2 workspace sources (root, chown later)
+# =============================================================
+RUN mkdir -p /home/${USER_NAME}/ros2_workspaces/src
+WORKDIR /home/${USER_NAME}/ros2_workspaces
 
-# 3. Clone micro-ROS setup (Done as root to avoid permission jumping, chown later)
-RUN git clone -b $ROS_DISTRO https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup &&\
-    git clone https://github.com/f1tenth/f1tenth_gym_ros.git src/f1tenth_gym_ros && \
+# micro-ROS
+RUN git clone -b ${ROS_DISTRO} \
+    https://github.com/micro-ROS/micro_ros_setup.git \
+    src/micro_ros_setup
+
+# F1Tenth + ackermann
+RUN git clone https://github.com/f1tenth/f1tenth_gym_ros.git src/f1tenth_gym_ros && \
     git clone https://github.com/ros-drivers/ackermann_msgs.git src/ackermann_msgs
-#check out the f1tenth_gym_ros repo...apparently just to test simulation it has to be to the path of the map!
-#https://github.com/f1tenth/f1tenth_gym_ros
-RUN sed -i "s|map_path: .*|map_path: '/home/$USER_NAME/ros2_workspaces/src/f1tenth_gym_ros/maps/levine'|g" src/f1tenth_gym_ros/config/sim.yaml
-# Install dependencies for the workspace
-RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
+
+# LiDAR — urg_node2 with urg_library as submodule
+RUN git clone --recurse-submodules \
+    https://github.com/Hokuyo-aut/urg_node2.git \
+    src/urg_node2
+
+# Configure LiDAR FOV for UST-10LX (+-12deg = +-0.20944 rad)
+RUN cp src/urg_node2/config/params_ether.yaml src/urg_node2/config/ust10lx.yaml && \
+    sed -i 's/angle_min.*/angle_min: -0.20944/' src/urg_node2/config/ust10lx.yaml && \
+    sed -i 's/angle_max.*/angle_max: 0.20944/' src/urg_node2/config/ust10lx.yaml
+
+# F1tenth stack
+RUN git clone --recurse-submodules https://github.com/f1tenth/f1tenth_system.git src/f1tenth_system
+
+# FIX: default vesc submodule in f1tenth_system is outdated on Humble
+RUN rm -rf src/f1tenth_system/vesc && \
+    git clone -b ros2 https://github.com/f1tenth/vesc.git src/f1tenth_system/vesc
+
+# Fix f1tenth_gym_ros map path
+RUN sed -i "s|map_path: .*|map_path: '/home/${USER_NAME}/ros2_workspaces/src/f1tenth_gym_ros/maps/levine'|g" \
+    src/f1tenth_gym_ros/config/sim.yaml
+
+# =============================================================
+# 3b. Patch vesc.yaml in-place for D3542 1450KV + DS3240 40kg
+#     Uses sed so the upstream file structure is preserved.
+#     All values match vesc.yaml generated for this hardware.
+# =============================================================
+RUN VESC_YAML=src/f1tenth_system/f1tenth_stack/config/vesc.yaml && \
+    # --- BLDC: D3542 1450KV, 7 pole pairs (14-pole motor) ---
+    sed -i 's/speed_to_erpm_gain:.*/speed_to_erpm_gain: 10150.0/'       $VESC_YAML && \
+    sed -i 's/speed_to_erpm_offset:.*/speed_to_erpm_offset: 0.0/'       $VESC_YAML && \
+    # --- Servo: DS3240 40kg, 500-2500us, neutral=1500us ---
+    # gain = 0.5 / 0.524 rad (+-30deg assumed throw) — re-measure and retune
+    sed -i 's/steering_angle_to_servo_gain:.*/steering_angle_to_servo_gain: -0.9549/'   $VESC_YAML && \
+    sed -i 's/steering_angle_to_servo_offset:.*/steering_angle_to_servo_offset: 0.5/'   $VESC_YAML && \
+    # --- Serial port ---
+    sed -i 's|port:.*|port: /dev/ttyACM0|'                              $VESC_YAML && \
+    # --- Current limits ---
+    sed -i 's/current_max:.*/current_max: 100.0/'                       $VESC_YAML && \
+    # --- Speed limits: 10150 * 2.5 m/s = 25375 erpm ---
+    sed -i 's/speed_min:.*/speed_min: -25375.0/'                        $VESC_YAML && \
+    sed -i 's/speed_max:.*/speed_max: 25375.0/'                         $VESC_YAML && \
+    # --- Servo range: DS3240 wider PWM range, protect hard stops ---
+    sed -i 's/servo_min:.*/servo_min: 0.10/'                            $VESC_YAML && \
+    sed -i 's/servo_max:.*/servo_max: 0.90/'                            $VESC_YAML && \
+    # --- Odometry ---
+    sed -i 's/wheelbase:.*/wheelbase: 0.25/'                            $VESC_YAML
+
+# =============================================================
+# 4. rosdep install
+# =============================================================
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     apt-get update && \
     rosdep update && \
     rosdep install --from-paths src --ignore-src -y && \
-#    git clone https://github.com/IEEE-UCF/SEC26Mirror.git /tmp/sec26mirror && \
-#    cd /tmp/sec26mirror && \
-#    git checkout 6e5be2c && \
-#   rosdep install --from-paths ros2_ws/src --ignore-src -y --skip-keys ament_python || true && \
-    cd / && \
-#   rm -rf /tmp/sec26mirror && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Fix permissions so the user/group own their workspace
-RUN chown -R $USER_UID:$USER_GID /home/$USER_NAME || true
+# Fix ownership before switching user
+RUN chown -R ${USER_UID}:${USER_GID} /home/${USER_NAME}
 
-# --- Switch to existing ubuntu user ---
-USER $USER_NAME
+# =============================================================
+# 5. Build workspace as user
+# =============================================================
+USER ${USER_NAME}
 
 RUN rosdep update
 
-
-# 4. Build the MICROROS Setup Workspace
-RUN /bin/bash -c ". /opt/ros/$ROS_DISTRO/setup.bash && \
-    cd /home/$USER_NAME/ros2_workspaces && \
-    colcon build && \
+# Build full workspace
+RUN /bin/bash -c "\
+    . /opt/ros/${ROS_DISTRO}/setup.bash && \
+    cd /home/${USER_NAME}/ros2_workspaces && \
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release && \
     rm -rf build log"
 
-# 5. Create and Build the Agent
-# Note: This creates a nested workspace 'microros_agent_ws' inside 'ros2_workspaces'
-#appears to also make it seem that wherever /opt/ros/humble/setup.bash is interlinked with
-#/home/ubuntu/ros2_workspaces/install/setup.bash
-RUN /bin/bash -c ". /opt/ros/$ROS_DISTRO/setup.bash && \
-    . /home/$USER_NAME/ros2_workspaces/install/setup.bash && \
-    cd /home/$USER_NAME/ros2_workspaces && \
+# Build micro-ROS agent
+RUN /bin/bash -c "\
+    . /opt/ros/${ROS_DISTRO}/setup.bash && \
+    . /home/${USER_NAME}/ros2_workspaces/install/setup.bash && \
+    cd /home/${USER_NAME}/ros2_workspaces && \
     ros2 run micro_ros_setup create_agent_ws.sh && \
     ros2 run micro_ros_setup build_agent.sh && \
     rm -rf microros_agent_ws/build microros_agent_ws/log"
 
-# 6. Update .bashrc
-RUN echo "" >> /home/$USER_NAME/.bashrc && \
-    echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USER_NAME/.bashrc && \
-    echo "source /home/$USER_NAME/ros2_workspaces/install/setup.bash" >> /home/$USER_NAME/.bashrc && \
-    echo 'function vnc() { bash ~/scripts/start_vnc.sh && export DISPLAY=:99; }' >> /home/$USER_NAME/.bashrc
+# =============================================================
+# 6. Shell environment
+# =============================================================
+RUN echo "" >> /home/${USER_NAME}/.bashrc && \
+    echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USER_NAME}/.bashrc && \
+    echo "source /home/${USER_NAME}/ros2_workspaces/install/setup.bash" >> /home/${USER_NAME}/.bashrc && \
+    echo 'function vnc() { bash ~/scripts/start_vnc.sh && export DISPLAY=:99; }' >> /home/${USER_NAME}/.bashrc
 
-#echo "source /home/$USER_NAME/ros2_workspaces/microros_agent_ws/install/setup.bash" >> /home/$USER_NAME/.bashrc
-
-# 7. Install PlatformIO via pipx
-# Note: We manually set ENV PATH so 'pio' is immediately available in this container's
-# runtime without requiring a shell restart or sourcing .bashrc
-ENV PATH="/home/$USER_NAME/.local/bin:$PATH"
+# =============================================================
+# 7. PlatformIO (for embedded firmware flashing)
+# =============================================================
+ENV PATH="/home/${USER_NAME}/.local/bin:$PATH"
 RUN pipx install platformio && \
     pipx inject platformio pyyaml && \
     pipx ensurepath
 
+# =============================================================
+# 8. Python + GPIO libraries (root)
+# =============================================================
 USER root
-# 8. Install any other python3 libraries here
-# Ensure gpiozero is available for Raspberry Pi GPIO control <-- not necessart for now
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-serial \
+    python3-requests \
     python3-gpiozero \
     python3-lgpio \
-    # python3-rpi.gpio \
-    python3-serial \
-    python3-requests && \
-    rm -rf /var/lib/apt/lists/*
+    && pip3 install pyusb \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-#//Everything below is for the dev parameter made from the .env file
+# =============================================================
+# DEV target — RViz2, Nav2, Foxglove, F1Tenth gym, GUI tools
+# =============================================================
 FROM base AS dev
 
-#switch to root user and install system dependicies for F1TENTH, GYM , and GUI tools
 USER root
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-$ROS_DISTRO-rviz2 \
-    ros-$ROS_DISTRO-rqt-graph \
-    ros-$ROS_DISTRO-navigation2 \
-    ros-$ROS_DISTRO-nav2-bringup \
-    ros-$ROS_DISTRO-xacro \
-    #manually install the yq binary for Jammy Jellyfish(22.04)
+    ros-humble-rviz2 \
+    ros-humble-rqt-graph \
+    ros-humble-navigation2 \
+    ros-humble-nav2-bringup \
+    ros-humble-xacro \
+    ros-humble-foxglove-bridge \
     python3-tk \
     x11-apps \
     xvfb \
@@ -156,40 +219,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fluxbox \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && apt-get install -y \
-    ros-humble-asio-cmake-module \
-    ros-humble-serial-driver \
-    ros-humble-io-context \
-    python3-pip \
-    && pip3 install pyusb
+# yq — ARM64 binary for Jetson TX2
+RUN wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_arm64 \
+    -O /usr/bin/yq && chmod +x /usr/bin/yq
 
-RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq \
-    && chmod +x /usr/bin/yq
-    # ros-$ROS_DISTRO-teleop \
-#Install f1tenth_gym and its numerical/rendering dependcies
-#check out https://github.com/f1tenth/f1tenth_gym/blob/main/setup.py
-# RUN pip3 install --no-cache-dir \
-#     gym==0.19.0 \
-#     numpy \
-#     Pillow \
-#     scipy \
-#     numba \
-#     pyyaml \
-#     pyglet==1.5.27 \
-#     f1tenth-gym
-# Install the core F1TENTH Gym physics engine directly from source---there will be a setup.py script
-#that does the python installation for you!
-# RUN pip3 install --no-cache-dir git+https://github.com/f1tenth/f1tenth_gym.git
+# F1Tenth gym physics engine
 RUN git clone https://github.com/f1tenth/f1tenth_gym.git /opt/f1tenth_gym && \
-    cd /opt/f1tenth_gym && \
-    pip3 install --no-cache-dir --default-timeout=120 -e .
+    pip3 install --no-cache-dir --default-timeout=120 -e /opt/f1tenth_gym
 
-USER $USER_NAME
+USER ${USER_NAME}
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
-#//Everything below is for the prod parameter made from the .env file
+
+# =============================================================
+# PROD target — minimal runtime only
+# =============================================================
 FROM base AS prod
 
-USER $USER_NAME
+USER ${USER_NAME}
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
