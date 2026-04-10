@@ -46,4 +46,4 @@ trajectory:
 
     min_wall_range: 0.15
     max_wall_range: 4.75
-    wall_blend_alpha: 0.25
+    wall_blend_alpha: 1.0        # 1.0 = pure corridor centering, 0.0 = pure right-wall tracking

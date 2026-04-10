@@ -181,18 +181,22 @@ class WallFollowReactive(Node):
         left_visible = left_proj is not None
 
         if right_visible and left_visible:
+            # Pure corridor centering: stay equidistant from both walls.
+            # Uses projected (lookahead) distances so corrections are predictive.
+            # Positive error → too close to right wall → steers left.
+            centering_error = (left_proj - right_proj) / 2.0
+            # wall_blend_alpha=1.0 → pure centering; 0.0 → pure right-wall tracking
             right_error = self.desired_distance - right_proj
-            centering_error = (right_Dt - left_Dt) / 2.0
             blended_error = (1.0 - self.wall_blend_alpha) * right_error + self.wall_blend_alpha * centering_error
             wall_dist_for_debug = right_Dt
         elif right_visible:
+            # Only right wall visible — track at desired_distance
             blended_error = self.desired_distance - right_proj
             wall_dist_for_debug = right_Dt
         elif left_visible:
-            typical_corridor = 2.0 * self.desired_distance
-            estimated_right = typical_corridor - left_proj
-            blended_error = self.desired_distance - estimated_right
-            wall_dist_for_debug = estimated_right
+            # Only left wall visible — mirror: steer right if too close to left
+            blended_error = left_proj - self.desired_distance
+            wall_dist_for_debug = left_Dt
         else:
             blended_error = 0.0
             wall_dist_for_debug = self.desired_distance
