@@ -64,9 +64,6 @@ class WallFollowReactive(Node):
         self.prev_time = None
         self.current_speed = 0.0
 
-        # Centering phase disabled — car cannot reposition while stationary
-        self.centering = False
-
         # -==- Pubs and Subs -==-
         self.scan_sub = self.create_subscription(
             LaserScan, '/scan', self.scan_callback, 10)
@@ -173,22 +170,18 @@ class WallFollowReactive(Node):
         left_visible = left_proj is not None
 
         if right_visible and left_visible:
-            # Pure corridor centering: stay equidistant from both walls.
-            # Uses projected (lookahead) distances so corrections are predictive.
-            # Positive error → too close to right wall → steers left.
-            centering_error = (left_proj - right_proj) / 2.0
-            # wall_blend_alpha=1.0 → pure centering; 0.0 → pure right-wall tracking
             right_error = self.desired_distance - right_proj
+            centering_error = (right_Dt - left_Dt) / 2.0
             blended_error = (1.0 - self.wall_blend_alpha) * right_error + self.wall_blend_alpha * centering_error
             wall_dist_for_debug = right_Dt
         elif right_visible:
-            # Only right wall visible — track at desired_distance
             blended_error = self.desired_distance - right_proj
             wall_dist_for_debug = right_Dt
         elif left_visible:
-            # Only left wall visible — mirror: steer right if too close to left
-            blended_error = left_proj - self.desired_distance
-            wall_dist_for_debug = left_Dt
+            typical_corridor = 2.0 * self.desired_distance
+            estimated_right = typical_corridor - left_proj
+            blended_error = self.desired_distance - estimated_right
+            wall_dist_for_debug = estimated_right
         else:
             blended_error = 0.0
             wall_dist_for_debug = self.desired_distance
@@ -335,62 +328,15 @@ class WallFollowReactive(Node):
         return angle, speed
 
     # -=====================- The Blend -=====================-
-    def _publish_zero_drive(self, steering_angle=0.0):
-        msg = AckermannDriveStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'base_link'
-        msg.drive.speed = 0.0
-        msg.drive.steering_angle = float(np.clip(steering_angle, STEER_MIN, STEER_MAX))
-        self.drive_pub.publish(msg)
-
     def scan_callback(self, msg):
-        # ── Startup centering phase ──────────────────────────────────────────
-        # Hold speed=0 and steer toward corridor center until the car is
-        # roughly centered for CENTER_SETTLE_REQUIRED consecutive scans.
-        if self.centering:
-            _, _, right_Dt, left_Dt = self.get_wall_error(msg, self.desired_distance)
-
-            if right_Dt is not None and left_Dt is not None:
-                # Positive error → too close to right wall → steer left (positive angle)
-                centering_error = (right_Dt - left_Dt) / 2.0
-                center_angle = self._CENTER_KP * centering_error
-                self._publish_zero_drive(center_angle)
-
-                if abs(centering_error) < self._CENTER_ERROR_THRESHOLD:
-                    self.center_settled_count += 1
-                else:
-                    self.center_settled_count = 0  # reset if drifted out
-
-                self.get_logger().info(
-                    f'[CENTERING] right={right_Dt:.2f}m left={left_Dt:.2f}m '
-                    f'err={centering_error:+.3f}m angle={np.rad2deg(center_angle):.1f}° '
-                    f'settled={self.center_settled_count}/{self._CENTER_SETTLE_REQUIRED}',
-                    throttle_duration_sec=0.25)
-
-                if self.center_settled_count >= self._CENTER_SETTLE_REQUIRED:
-                    self.centering = False
-                    self.get_logger().info('=' * 55)
-                    self.get_logger().info('[CENTERING] Complete — releasing to autonomy')
-                    self.get_logger().info('=' * 55)
-            else:
-                # Can't see both walls yet — hold still
-                self._publish_zero_drive(0.0)
-                self.get_logger().info(
-                    '[CENTERING] Waiting for both walls…',
-                    throttle_duration_sec=0.5)
-            return
-        # ────────────────────────────────────────────────────────────────────
-
         wf_error, wall_dist, right_Dt, left_Dt = self.get_wall_error(msg, self.desired_distance)
         wf_angle, wf_speed = self.wall_follow_control(wf_error)
 
         ranges = np.array(msg.ranges)
         num_beams = len(ranges)
         angles = msg.angle_min + np.arange(num_beams) * msg.angle_increment
-        # Only look at ±45° for reactive triggering — ±60° includes side walls in narrow corridors
-        front_mask = np.abs(angles) <= np.pi / 4
-        valid = ranges[front_mask & np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= msg.range_max)]
-        closest = np.min(valid) if len(valid) > 0 else self.max_lidar_range
+        valid_mask = np.isfinite(ranges) & (ranges > self.min_wall_range) & (np.abs(angles) <= np.pi / 2)
+        closest = np.min(ranges[valid_mask]) if np.any(valid_mask) else self.max_lidar_range
 
         lower = self.danger_threshold - self.blend_range
         if closest >= self.danger_threshold:
